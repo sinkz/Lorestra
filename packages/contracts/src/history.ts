@@ -4,6 +4,7 @@ import {
   AuthorSchema,
   IdSchema,
   IsoDateTimeSchema,
+  LocaleSchema,
   PageInfoSchema,
   PaginationInputSchema,
   SlugSchema,
@@ -18,6 +19,9 @@ export const HistoryEventTypeSchema = z.enum([
   'document_updated',
 ])
 export type HistoryEventType = z.infer<typeof HistoryEventTypeSchema>
+
+export const HistoryCategorySchema = z.enum(['proposal', 'publish', 'create'])
+export type HistoryCategory = z.infer<typeof HistoryCategorySchema>
 
 export const HistoryEventSchema = z.object({
   id: IdSchema,
@@ -36,6 +40,9 @@ export const HistoryInputSchema = PaginationInputSchema.extend({
   documentId: IdSchema.optional(),
   proposalId: IdSchema.optional(),
   type: HistoryEventTypeSchema.optional(),
+  category: HistoryCategorySchema.optional(),
+  locale: LocaleSchema.optional(),
+  q: z.string().trim().min(1).max(200).optional(),
 })
 export type HistoryInput = z.infer<typeof HistoryInputSchema>
 

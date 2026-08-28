@@ -8,6 +8,7 @@ import type {
   Author,
   CreateProposalInput,
   Document,
+  DocumentListResponse,
   DocumentResponse,
   DocumentRevision,
   DocumentType,
@@ -19,6 +20,7 @@ import type {
   HistoryInput,
   HistoryResponse,
   KnowledgeClient,
+  ListDocumentsInput,
   ListProposalsInput,
   NavigationInput,
   NavigationResponse,
@@ -28,6 +30,7 @@ import type {
   ProposalListResponse,
   ProposalStatus,
   ProposalTransitionInput,
+  PageInfo,
   SearchInput,
   SearchResponse,
 } from '@lorestra/contracts'
@@ -222,13 +225,23 @@ const page = <T>(
   items: readonly T[],
   cursor: string | undefined,
   limit: number,
-): { items: T[]; nextCursor: string | null } => {
+): { items: T[]; pageInfo: PageInfo } => {
   const parsedCursor = cursor ? Number.parseInt(cursor, 10) : 0
   const start = Number.isFinite(parsedCursor) && parsedCursor >= 0 ? parsedCursor : 0
   const selected = items.slice(start, start + limit)
   const nextCursor =
     start + selected.length < items.length ? String(start + selected.length) : null
-  return { items: selected, nextCursor }
+  const hasPreviousPage = start > 0
+  return {
+    items: selected,
+    pageInfo: {
+      nextCursor,
+      hasNextPage: nextCursor !== null,
+      previousCursor: hasPreviousPage ? String(Math.max(0, start - limit)) : null,
+      hasPreviousPage,
+      totalCount: items.length,
+    },
+  }
 }
 
 /**
@@ -625,8 +638,11 @@ const toProposal = (proposal: FixtureProposal): Proposal =>
     status: toProposalStatus(proposal.status),
     author: author(proposal.author),
     createdAt: proposal.createdAt,
-    updatedAt: proposal.updatedAt,
-    changeCount: proposal.files.length,
+  updatedAt: proposal.updatedAt,
+  changeCount: proposal.files.length,
+  createsDocument:
+    proposal.kind === 'create' ||
+    proposal.files.some((file) => file.changeType === 'added'),
     changes: proposal.files.map((file) => proposalChange(proposal, file)),
     checks: proposal.checks.map((check) => ({
       name: check.name,
@@ -698,6 +714,45 @@ export class MockKnowledgeClient implements KnowledgeClient {
         contractSummary(document, allDocuments),
       ),
       generatedAt: '2026-08-28T12:00:00.000Z',
+    }
+  }
+
+  public async listDocuments(
+    input?: ListDocumentsInput,
+  ): Promise<DocumentListResponse> {
+    const request = input ?? { locale: 'en', limit: 20, sort: 'updated' }
+    const allDocuments = this.store.listDocuments()
+    const query = request.q?.trim().toLocaleLowerCase(request.locale) ?? ''
+    const filtered = allDocuments
+      .filter(
+        (document) =>
+          visible(document) &&
+          document.locale === request.locale &&
+          (!request.folderId || document.folderId === request.folderId) &&
+          (!request.type || documentType(document) === request.type) &&
+          (!request.status || document.status === request.status) &&
+          (!query ||
+            [
+              document.title,
+              document.description,
+              document.excerpt,
+              document.folderPath.join('/'),
+              ...document.tags,
+            ].some((value) =>
+              value.toLocaleLowerCase(request.locale).includes(query),
+            )),
+      )
+      .sort((left, right) =>
+        request.sort === 'title'
+          ? left.title.localeCompare(right.title, request.locale)
+          : request.sort === 'type'
+            ? documentType(left).localeCompare(documentType(right), request.locale)
+            : right.updatedAt.localeCompare(left.updatedAt),
+      )
+    const result = page(filtered, request.cursor, request.limit)
+    return {
+      items: result.items.map((document) => contractSummary(document, allDocuments)),
+      pageInfo: result.pageInfo,
     }
   }
 
@@ -839,10 +894,7 @@ export class MockKnowledgeClient implements KnowledgeClient {
         updatedAt: document.updatedAt,
         relationCount: document.relatedDocumentIds.length,
       })),
-      pageInfo: {
-        nextCursor: result.nextCursor,
-        hasNextPage: result.nextCursor !== null,
-      },
+      pageInfo: result.pageInfo,
       generatedAt: '2026-08-28T12:00:00.000Z',
     }
   }
@@ -857,11 +909,24 @@ export class MockKnowledgeClient implements KnowledgeClient {
       .filter(
         (event) =>
           !event.documentId ||
-          documentsById.get(event.documentId)?.visibility === 'public',
+          (documentsById.get(event.documentId)?.visibility === 'public' &&
+            (!request.locale ||
+              documentsById.get(event.documentId)?.locale === request.locale)),
       )
       .filter((event) => !request.documentId || event.documentId === request.documentId)
       .filter((event) => !request.proposalId || event.proposalId === request.proposalId)
       .filter((event) => !request.type || toHistoryType(event.type) === request.type)
+      .filter(
+        (event) =>
+          !request.category ||
+          historyCategory(toHistoryType(event.type)) === request.category,
+      )
+      .filter((event) => {
+        if (!request.q) return true
+        return `${event.summary} ${event.actor}`
+          .toLocaleLowerCase()
+          .includes(request.q.toLocaleLowerCase())
+      })
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     const result = page(filtered, request.cursor, request.limit)
     return {
@@ -886,12 +951,17 @@ export class MockKnowledgeClient implements KnowledgeClient {
             ? event.documentVersion
             : null,
       })),
-      pageInfo: {
-        nextCursor: result.nextCursor,
-        hasNextPage: result.nextCursor !== null,
-      },
+      pageInfo: result.pageInfo,
     }
   }
+}
+
+function historyCategory(
+  type: HistoryEvent['type'],
+): 'proposal' | 'publish' | 'create' {
+  if (type === 'document_published') return 'create'
+  if (type === 'document_updated') return 'publish'
+  return 'proposal'
 }
 
 export class MockProposalClient implements ProposalClient {
@@ -918,12 +988,10 @@ export class MockProposalClient implements ProposalClient {
           createdAt: full.createdAt,
           updatedAt: full.updatedAt,
           changeCount: full.changeCount,
+          createsDocument: full.createsDocument,
         }
       }),
-      pageInfo: {
-        nextCursor: result.nextCursor,
-        hasNextPage: result.nextCursor !== null,
-      },
+      pageInfo: result.pageInfo,
     }
   }
 

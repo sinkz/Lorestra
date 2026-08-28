@@ -77,6 +77,7 @@ export const ProposalSummarySchema = z.object({
   createdAt: IsoDateTimeSchema,
   updatedAt: IsoDateTimeSchema,
   changeCount: z.number().int().min(0),
+  createsDocument: z.boolean(),
 })
 export type ProposalSummary = z.infer<typeof ProposalSummarySchema>
 

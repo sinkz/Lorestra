@@ -1,5 +1,6 @@
 import type {
   Document,
+  DocumentListResponse,
   DocumentRevision,
   DocumentResponse,
   GetDocumentInput,
@@ -8,6 +9,7 @@ import type {
   HistoryInput,
   HistoryEvent,
   HistoryResponse,
+  ListDocumentsInput,
   NavigationInput,
   NavigationResponse,
   SearchInput,
@@ -38,6 +40,7 @@ export interface KnowledgeStore {
 
 export interface KnowledgeReader {
   getNavigation(input: NavigationInput): Promise<NavigationResponse>
+  listDocuments(input: ListDocumentsInput): Promise<DocumentListResponse>
   getDocument(input: GetDocumentInput): Promise<DocumentResponse | null>
   getGraph(input: GraphInput): Promise<GraphResponse>
   search(input: SearchInput): Promise<SearchResponse>

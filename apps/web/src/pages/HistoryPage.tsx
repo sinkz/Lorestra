@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useDeferredValue, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import {
@@ -18,6 +18,7 @@ import {
   ErrorState,
   LoadingState,
   PageHeading,
+  Pagination,
   formatDate,
   formatRelativeDate,
 } from '../shared/ui'
@@ -26,8 +27,6 @@ const eventTypes: Array<HistoryEventType | 'all'> = [
   'all',
   'proposal',
   'publish',
-  'restore',
-  'relation',
   'create',
 ]
 
@@ -36,8 +35,15 @@ export function HistoryPage() {
   const locale = useLocale()
   const [params, setParams] = useSearchParams()
   const query = params.get('q') ?? ''
+  const deferredQuery = useDeferredValue(query)
   const type = params.get('type') as HistoryEventType | null
-  const history = useHistoryQuery()
+  const cursor = params.get('cursor') ?? undefined
+  const history = useHistoryQuery(
+    undefined,
+    cursor,
+    deferredQuery || undefined,
+    type ?? undefined,
+  )
   const navigation = useNavigationQuery()
   const proposals = useProposalsQuery('all')
   const visible = useMemo(() => {
@@ -61,7 +67,10 @@ export function HistoryPage() {
     [navigation.data?.documents],
   )
   const proposalTitles = useMemo(
-    () => new Map((proposals.data ?? []).map((proposal) => [proposal.id, proposal])),
+    () =>
+      new Map(
+        (proposals.data?.items ?? []).map((proposal) => [proposal.id, proposal]),
+      ),
     [proposals.data],
   )
 
@@ -69,6 +78,13 @@ export function HistoryPage() {
     const next = new URLSearchParams(params)
     if (value) next.set(name, value)
     else next.delete(name)
+    next.delete('cursor')
+    setParams(next)
+  }
+  const updateCursor = (nextCursor: string | null) => {
+    const next = new URLSearchParams(params)
+    if (nextCursor && nextCursor !== '0') next.set('cursor', nextCursor)
+    else next.delete('cursor')
     setParams(next)
   }
   const clear = () => setParams(new URLSearchParams())
@@ -139,25 +155,39 @@ export function HistoryPage() {
           </div>
         </div>
         {visible.length ? (
-          <div className="history-list">
-            <div className="timeline">
-              {visible.map((event) => (
-                <HistoryCard
-                  event={event}
-                  key={event.id}
-                  document={
-                    event.documentId ? documentTitles.get(event.documentId) : undefined
-                  }
-                  proposalTitle={
-                    event.proposalId
-                      ? proposalTitles.get(event.proposalId)?.title
-                      : undefined
-                  }
-                  locale={locale}
-                />
-              ))}
+          <>
+            <div className="history-list">
+              <div className="timeline">
+                {visible.map((event) => (
+                  <HistoryCard
+                    event={event}
+                    key={event.id}
+                    document={
+                      event.documentId
+                        ? documentTitles.get(event.documentId)
+                        : undefined
+                    }
+                    proposalTitle={
+                      event.proposalId
+                        ? proposalTitles.get(event.proposalId)?.title
+                        : undefined
+                    }
+                    locale={locale}
+                    cursor={cursor}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
+            {history.data ? (
+              <Pagination
+                pageInfo={history.data.pageInfo}
+                pageSize={visible.length}
+                cursor={cursor}
+                onPrevious={updateCursor}
+                onNext={updateCursor}
+              />
+            ) : null}
+          </>
         ) : (
           <EmptyState title={t('history.noEvents')} />
         )}
@@ -171,11 +201,13 @@ function HistoryCard({
   document,
   proposalTitle,
   locale,
+  cursor,
 }: {
   event: HistoryEvent
   document?: DocumentSummary
   proposalTitle?: string
   locale: 'en' | 'pt-BR'
+  cursor?: string
 }) {
   const { t } = useTranslation()
   return (
@@ -184,11 +216,17 @@ function HistoryCard({
       <article className="history-event-card">
         <Link
           className="history-link"
-          to={`/history/${encodeURIComponent(event.id)}`}
+          to={`/history/${encodeURIComponent(event.id)}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`}
           aria-label={t('history.openEvent', { title: event.title })}
         >
           <strong>{event.title}</strong>
-          <p>{event.body || event.actor}</p>
+          <p>
+            {event.revisionId
+              ? t('history.publishedRevision', {
+                  version: event.revisionId.replace(/^v/, ''),
+                })
+              : event.body || event.actor}
+          </p>
           <time dateTime={event.createdAt}>
             {formatRelativeDate(event.createdAt, locale)} ·{' '}
             {formatDate(event.createdAt, locale, {

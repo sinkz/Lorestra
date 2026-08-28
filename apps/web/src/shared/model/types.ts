@@ -62,7 +62,7 @@ interface GraphEdge {
   id: string
   source: string
   target: string
-  relation: 'references' | 'backlink' | 'suggested'
+  relation: 'contains' | 'references' | 'backlink' | 'suggested'
 }
 
 export interface GraphSnapshot {
@@ -112,6 +112,7 @@ export interface Proposal {
   createdAt: string
   updatedAt: string
   changeCount: number
+  createsDocument: boolean
   files: ProposalFile[]
   checks: CheckResult[]
   documentIds: string[]
@@ -142,14 +143,43 @@ export interface SearchData {
   total: number
 }
 
+export interface PageInfo {
+  nextCursor: string | null
+  previousCursor: string | null
+  hasNextPage: boolean
+  hasPreviousPage: boolean
+  totalCount: number
+}
+
+export interface DocumentListData {
+  items: DocumentSummary[]
+  pageInfo: PageInfo
+}
+
 export interface HistoryData {
   branch: string
   totalVersions: number
   events: HistoryEvent[]
+  pageInfo: PageInfo
+}
+
+export interface ProposalListData {
+  items: Proposal[]
+  pageInfo: PageInfo
 }
 
 export interface AppKnowledgeClient {
   getNavigation(input?: { locale?: Locale; folderId?: string }): Promise<NavigationData>
+  listDocuments(input?: {
+    locale?: Locale
+    folderId?: string
+    query?: string
+    kind?: Exclude<DocumentKind, 'folder'>
+    status?: DocumentStatus
+    sort?: 'updated' | 'title' | 'kind'
+    cursor?: string
+    limit?: number
+  }): Promise<DocumentListData>
   getDocument(input: {
     slug: string
     locale?: Locale
@@ -162,14 +192,23 @@ export interface AppKnowledgeClient {
     locale?: Locale
   }): Promise<GraphSnapshot>
   search(input: { query: string; locale?: Locale; limit?: number }): Promise<SearchData>
-  getHistory(input?: { documentId?: string; locale?: Locale }): Promise<HistoryData>
+  getHistory(input?: {
+    documentId?: string
+    locale?: Locale
+    cursor?: string
+    limit?: number
+    type?: HistoryEventType
+    query?: string
+  }): Promise<HistoryData>
 }
 
 export interface AppProposalClient {
   list(input?: {
     status?: ProposalStatus | 'all'
     locale?: Locale
-  }): Promise<Proposal[]>
+    cursor?: string
+    limit?: number
+  }): Promise<ProposalListData>
   get(input: { proposalId: string; locale?: Locale }): Promise<Proposal | null>
   create(input: {
     title: string

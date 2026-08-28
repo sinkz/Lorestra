@@ -5,6 +5,8 @@ import {
   IdSchema,
   IsoDateTimeSchema,
   LocaleSchema,
+  PageInfoSchema,
+  PaginationInputSchema,
   PublicationStatusSchema,
   SlugSchema,
   VisibilitySchema,
@@ -45,6 +47,25 @@ export const DocumentSummarySchema = z.object({
   relationCount: z.number().int().min(0),
 })
 export type DocumentSummary = z.infer<typeof DocumentSummarySchema>
+
+export const DocumentSortSchema = z.enum(['updated', 'title', 'type'])
+export type DocumentSort = z.infer<typeof DocumentSortSchema>
+
+export const ListDocumentsInputSchema = PaginationInputSchema.extend({
+  locale: LocaleSchema.default('en'),
+  folderId: IdSchema.optional(),
+  q: z.string().trim().max(200).optional(),
+  type: DocumentTypeSchema.optional(),
+  status: PublicationStatusSchema.optional(),
+  sort: DocumentSortSchema.default('updated'),
+})
+export type ListDocumentsInput = z.infer<typeof ListDocumentsInputSchema>
+
+export const DocumentListResponseSchema = z.object({
+  items: z.array(DocumentSummarySchema),
+  pageInfo: PageInfoSchema,
+})
+export type DocumentListResponse = z.infer<typeof DocumentListResponseSchema>
 
 export const DocumentRevisionSchema = z.object({
   id: IdSchema,

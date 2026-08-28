@@ -1,4 +1,6 @@
 import {
+  memo,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -36,9 +38,16 @@ function flattenTree(
     list.push(document)
     docsByFolder.set(document.folderId, list)
   }
-  const countDocuments = (node: FolderNode): number =>
-    (docsByFolder.get(node.id)?.length ?? 0) +
-    node.children.reduce((total, child) => total + countDocuments(child), 0)
+  const countByFolder = new Map<string, number>()
+  const countDocuments = (node: FolderNode): number => {
+    const cached = countByFolder.get(node.id)
+    if (cached !== undefined) return cached
+    const count =
+      (docsByFolder.get(node.id)?.length ?? 0) +
+      node.children.reduce((total, child) => total + countDocuments(child), 0)
+    countByFolder.set(node.id, count)
+    return count
+  }
   const visit = (nodes: FolderNode[], currentDepth: number) => {
     for (const node of nodes) {
       const itemCount = countDocuments(node)
@@ -115,7 +124,7 @@ export function FolderTree({
     else setActiveIndex((current) => Math.min(current, entries.length - 1))
   }, [entries.length, selectedIndex])
 
-  const focusRow = (index: number) => {
+  const focusRow = useCallback((index: number) => {
     if (!entries.length) return
     const nextIndex = Math.max(0, Math.min(index, entries.length - 1))
     setActiveIndex(nextIndex)
@@ -123,9 +132,9 @@ export function FolderTree({
     requestAnimationFrame(() =>
       requestAnimationFrame(() => rowRefs.current[nextIndex]?.focus()),
     )
-  }
+  }, [entries.length, virtualizer])
 
-  const onTreeKeyDown = (event: KeyboardEvent<HTMLElement>, index: number) => {
+  const onTreeKeyDown = useCallback((event: KeyboardEvent<HTMLElement>, index: number) => {
     const entry = entries[index]
     if (!entry) return
     if (event.key === 'ArrowDown') {
@@ -180,7 +189,13 @@ export function FolderTree({
           ?.click()
       }
     }
-  }
+  }, [entries, expandedFolders, focusRow, toggleFolder])
+
+  const registerRow = useCallback((index: number, node: HTMLElement | null) => {
+    rowRefs.current[index] = node
+  }, [])
+
+  const focusEntry = useCallback((index: number) => setActiveIndex(index), [])
 
   return (
     <div
@@ -196,17 +211,20 @@ export function FolderTree({
             return (
               <TreeRow
                 key={`${entry.kind}-${entry.id}`}
+                index={virtualRow.index}
                 entry={entry}
-                location={location.pathname}
+                selected={virtualRow.index === selectedIndex}
+                open={
+                  entry.kind === 'folder' && entry.hasChildren
+                    ? (expandedFolders[entry.id] ?? true)
+                    : false
+                }
                 t={t}
                 toggleFolder={toggleFolder}
-                expandedFolders={expandedFolders}
                 active={activeIndex === virtualRow.index}
-                rowRef={(node) => {
-                  rowRefs.current[virtualRow.index] = node
-                }}
-                onFocus={() => setActiveIndex(virtualRow.index)}
-                onKeyDown={(event) => onTreeKeyDown(event, virtualRow.index)}
+                registerRow={registerRow}
+                onFocus={focusEntry}
+                onKeyDown={onTreeKeyDown}
                 style={{
                   position: 'absolute',
                   top: 0,
@@ -221,17 +239,21 @@ export function FolderTree({
         visibleEntries.map((virtualRow) => (
           <TreeRow
             key={`${entries[virtualRow.index].kind}-${entries[virtualRow.index].id}`}
+            index={virtualRow.index}
             entry={entries[virtualRow.index]}
-            location={location.pathname}
+            selected={virtualRow.index === selectedIndex}
+            open={
+              entries[virtualRow.index].kind === 'folder' &&
+              entries[virtualRow.index].hasChildren
+                ? (expandedFolders[entries[virtualRow.index].id] ?? true)
+                : false
+            }
             t={t}
             toggleFolder={toggleFolder}
-            expandedFolders={expandedFolders}
             active={activeIndex === virtualRow.index}
-            rowRef={(node) => {
-              rowRefs.current[virtualRow.index] = node
-            }}
-            onFocus={() => setActiveIndex(virtualRow.index)}
-            onKeyDown={(event) => onTreeKeyDown(event, virtualRow.index)}
+            registerRow={registerRow}
+            onFocus={focusEntry}
+            onKeyDown={onTreeKeyDown}
           />
         ))
       )}
@@ -239,43 +261,54 @@ export function FolderTree({
   )
 }
 
-function TreeRow({
+const TreeRow = memo(function TreeRow({
+  index,
   entry,
-  location,
+  selected,
+  open,
   t,
   toggleFolder,
-  expandedFolders,
   active,
-  rowRef,
+  registerRow,
   onFocus,
   onKeyDown,
   style,
 }: {
+  index: number
   entry: TreeEntry
-  location: string
+  selected: boolean
+  open: boolean
   t: ReturnType<typeof useTranslation>['t']
   toggleFolder: (id: string) => void
-  expandedFolders: Record<string, boolean>
   active: boolean
-  rowRef: (node: HTMLElement | null) => void
-  onFocus: () => void
-  onKeyDown: (event: KeyboardEvent<HTMLElement>) => void
+  registerRow: (index: number, node: HTMLElement | null) => void
+  onFocus: (index: number) => void
+  onKeyDown: (event: KeyboardEvent<HTMLElement>, index: number) => void
   style?: CSSProperties
 }) {
+  const rowRef = useCallback(
+    (node: HTMLElement | null) => registerRow(index, node),
+    [index, registerRow],
+  )
+  const handleFocus = useCallback(() => onFocus(index), [index, onFocus])
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLElement>) => onKeyDown(event, index),
+    [index, onKeyDown],
+  )
+
   if (entry.kind === 'document' && entry.document) {
-    const selected = location.includes(`/documents/${entry.document.slug}`)
     return (
       <Link
         className={`tree-row tree-document ${selected ? 'is-selected' : ''}`}
         to={`/documents/${encodeURIComponent(entry.document.slug)}?tab=preview`}
-        style={{ '--tree-depth': entry.depth } as CSSProperties}
+        style={{ ...style, '--tree-depth': entry.depth } as CSSProperties}
         role="treeitem"
         aria-level={entry.depth}
         aria-current={selected ? 'page' : undefined}
         tabIndex={active ? 0 : -1}
         ref={rowRef as (node: HTMLAnchorElement | null) => void}
-        onFocus={onFocus}
-        onKeyDown={onKeyDown}
+        onFocus={handleFocus}
+        onKeyDown={handleKeyDown}
       >
         <Icon name="file" />
         <span className="tree-row-name">{entry.name}</span>
@@ -283,7 +316,6 @@ function TreeRow({
       </Link>
     )
   }
-  const open = entry.hasChildren ? (expandedFolders[entry.id] ?? true) : false
   return (
     <div
       className="tree-folder-row"
@@ -293,8 +325,8 @@ function TreeRow({
       aria-expanded={entry.hasChildren ? open : undefined}
       tabIndex={active ? 0 : -1}
       ref={rowRef}
-      onFocus={onFocus}
-      onKeyDown={onKeyDown}
+      onFocus={handleFocus}
+      onKeyDown={handleKeyDown}
     >
       <button
         type="button"
@@ -334,4 +366,4 @@ function TreeRow({
       </Link>
     </div>
   )
-}
+})

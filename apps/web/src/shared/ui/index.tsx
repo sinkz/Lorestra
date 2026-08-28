@@ -8,7 +8,12 @@ import {
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { DocumentStatus, DocumentKind, ProposalStatus } from '../model/types'
+import type {
+  DocumentStatus,
+  DocumentKind,
+  PageInfo,
+  ProposalStatus,
+} from '../model/types'
 
 export type IconName =
   | 'atlas'
@@ -254,6 +259,55 @@ export function ErrorState({ onRetry }: { onRetry?: () => void }) {
       <strong>{t('common.errorTitle')}</strong>
       {onRetry ? <Button onClick={onRetry}>{t('common.retry')}</Button> : null}
     </div>
+  )
+}
+
+export function Pagination({
+  pageInfo,
+  pageSize,
+  cursor,
+  onPrevious,
+  onNext,
+}: {
+  pageInfo: PageInfo
+  pageSize: number
+  cursor?: string
+  onPrevious: (cursor: string | null) => void
+  onNext: (cursor: string | null) => void
+}) {
+  const { t } = useTranslation()
+  const parsed = cursor ? Number.parseInt(cursor, 10) : 0
+  const start = Number.isFinite(parsed) && parsed >= 0 ? parsed + 1 : 1
+  const end = Math.min(start + pageSize - 1, pageInfo.totalCount)
+  if (!pageInfo.hasPreviousPage && !pageInfo.hasNextPage) return null
+  return (
+    <nav className="pagination" aria-label={t('common.pagination')}>
+      <span className="pagination-range">
+        {t('common.paginationRange', {
+          start,
+          end,
+          total: pageInfo.totalCount,
+        })}
+      </span>
+      <div className="pagination-actions">
+        <Button
+          variant="secondary"
+          icon="back"
+          disabled={!pageInfo.hasPreviousPage}
+          onClick={() => onPrevious(pageInfo.previousCursor)}
+        >
+          {t('common.previous')}
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={!pageInfo.hasNextPage}
+          onClick={() => onNext(pageInfo.nextCursor)}
+        >
+          {t('common.next')}
+          <Icon name="arrow" />
+        </Button>
+      </div>
+    </nav>
   )
 }
 

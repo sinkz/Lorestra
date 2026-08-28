@@ -1,4 +1,9 @@
-import { ApiErrorResponseSchema, HealthResponseSchema } from '@lorestra/contracts'
+import {
+  ApiErrorResponseSchema,
+  DocumentListResponseSchema,
+  HealthResponseSchema,
+  HistoryResponseSchema,
+} from '@lorestra/contracts'
 
 import { createApp } from './create-app.js'
 
@@ -13,8 +18,30 @@ describe('Lorestra API', () => {
     const openapi = await app.request('http://localhost/openapi.json')
     expect(openapi.status).toBe(200)
     const document = (await openapi.json()) as { paths?: Record<string, unknown> }
+    expect(document.paths).toHaveProperty('/documents')
     expect(document.paths).toHaveProperty('/documents/{slug}')
     expect(document.paths).toHaveProperty('/proposals')
+  })
+
+  it('lists published documents with stable cursor metadata', async () => {
+    const firstPage = await app.request(
+      'http://localhost/documents?locale=en&limit=2&sort=title',
+    )
+    expect(firstPage.status).toBe(200)
+    const firstBody = await firstPage.json()
+    const parsed = DocumentListResponseSchema.parse(firstBody)
+    expect(parsed.items).toHaveLength(2)
+    expect(parsed.pageInfo.hasPreviousPage).toBe(false)
+    expect(parsed.pageInfo.totalCount).toBeGreaterThan(2)
+    expect(parsed.pageInfo.hasNextPage).toBe(true)
+
+    const secondPage = await app.request(
+      `http://localhost/documents?locale=en&limit=2&sort=title&cursor=${parsed.pageInfo.nextCursor}`,
+    )
+    const secondBody = DocumentListResponseSchema.parse(await secondPage.json())
+    expect(secondBody.pageInfo.hasPreviousPage).toBe(true)
+    expect(secondBody.pageInfo.previousCursor).toBe('0')
+    expect(secondBody.items[0]?.id).not.toBe(parsed.items[0]?.id)
   })
 
   it('returns a published document and hides internal drafts', async () => {
@@ -77,6 +104,25 @@ describe('Lorestra API', () => {
     expect(proposal.status).toBe(200)
     const proposalBody = (await proposal.json()) as { status: string }
     expect(proposalBody.status).toBe('open')
+  })
+
+  it('filters history before pagination so cursors match the visible locale', async () => {
+    const history = await app.request(
+      'http://localhost/history?locale=en&category=create&limit=2',
+    )
+    expect(history.status).toBe(200)
+    const body = HistoryResponseSchema.parse(await history.json())
+    expect(body.items.length).toBeLessThanOrEqual(2)
+    expect(body.items.every((event) => event.type === 'document_published')).toBe(
+      true,
+    )
+
+    const noMatch = await app.request(
+      'http://localhost/history?locale=en&q=no-event-can-match',
+    )
+    const noMatchBody = HistoryResponseSchema.parse(await noMatch.json())
+    expect(noMatchBody.items).toHaveLength(0)
+    expect(noMatchBody.pageInfo.totalCount).toBe(0)
   })
 
   it('allows only localhost read CORS requests', async () => {

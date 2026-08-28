@@ -5,6 +5,7 @@ Feature: Lorestra knowledge workflow
     Given I open Lorestra at "/atlas?scope=entire"
     Then the heading "The living map" is visible
     And the knowledge graph has visible nodes
+    And the knowledge graph is spread across both axes
     When I open the graph node "What is Lorestra?"
     Then the heading "What is Lorestra?" is visible
     When I switch from the document to its graph
@@ -32,6 +33,18 @@ Feature: Lorestra knowledge workflow
     Then the heading "Make the reading loop explicit in the Docs guide" is visible
     And the proposal action "Merge into vault" is visible
     And the proposal shows a Markdown diff
+
+  Scenario: Browse proposals as a review queue
+    Given I open Lorestra at "/proposals"
+    Then the heading "Proposals" is visible
+    And the proposal review queue uses rows instead of cards
+
+  Scenario: Keep long Markdown source inside its workspace
+    Given I open Lorestra at "/documents/what-is-lorestra?tab=preview"
+    Then the heading "What is Lorestra?" is visible
+    When I open the Markdown source tab
+    Then the Markdown source stays inside the document panel
+    And the page has no horizontal overflow
 
   Scenario: Approval does not publish a proposal with incomplete checks
     Given I open Lorestra at "/proposals/proposal-incident-runbook-001"

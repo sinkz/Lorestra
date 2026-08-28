@@ -55,6 +55,7 @@ function proposal(overrides: Partial<Proposal> = {}): Proposal {
     createdAt: '2026-08-28T12:00:00.000Z',
     updatedAt: '2026-08-28T12:00:00.000Z',
     changeCount: 1,
+    createsDocument: false,
     files: [
       {
         path: 'vault/Docs/en/test.md',
@@ -201,7 +202,16 @@ describe('Lorestra WebMCP tools', () => {
           })),
         },
         proposals: {
-          list: vi.fn(async () => manyProposals),
+          list: vi.fn(async () => ({
+            items: manyProposals.slice(0, 100),
+            pageInfo: {
+              nextCursor: '100',
+              previousCursor: null,
+              hasNextPage: true,
+              hasPreviousPage: false,
+              totalCount: manyProposals.length,
+            },
+          })),
         },
       }),
       () => 'en',

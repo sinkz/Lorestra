@@ -6,7 +6,10 @@ const createdEvents: readonly FixtureHistoryEvent[] = documents.map((document) =
   documentId: document.id,
   documentVersion: document.version,
   type: 'created',
-  summary: 'Document added to the example vault.',
+  summary:
+    document.locale === 'pt-BR'
+      ? 'Documento adicionado ao vault de exemplo.'
+      : 'Document added to the example vault.',
   actor: document.author,
   createdAt: document.createdAt,
 }))

@@ -16,7 +16,22 @@ Then('the knowledge graph has visible nodes', async ({ page }) => {
 })
 
 When('I open the graph node {string}', async ({ page }, title: string) => {
-  await page.locator('.react-flow__node').filter({ hasText: title }).click()
+  await page.locator('.react-flow__node').filter({ hasText: title }).dblclick()
+})
+
+Then('the knowledge graph is spread across both axes', async ({ page }) => {
+  await page.waitForTimeout(1_100)
+  const boxes = await page.locator('.react-flow__node').evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const box = node.getBoundingClientRect()
+      return { x: box.x, y: box.y }
+    }),
+  )
+  expect(boxes.length).toBeGreaterThan(5)
+  const xs = boxes.map((box) => box.x)
+  const ys = boxes.map((box) => box.y)
+  expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(350)
+  expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(220)
 })
 
 When('I switch from the document to its graph', async ({ page }) => {
@@ -174,6 +189,38 @@ Then('the page has no horizontal overflow', async ({ page }) => {
     scrollWidth: document.documentElement.scrollWidth,
   }))
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth + 1)
+})
+
+When('I open the Markdown source tab', async ({ page }) => {
+  await page.getByRole('tab', { name: 'Markdown' }).click()
+})
+
+Then('the Markdown source stays inside the document panel', async ({ page }) => {
+  const dimensions = await page.locator('.document-content').evaluate((panel) => {
+    const source = panel.querySelector('.markdown-source')
+    if (!(source instanceof HTMLElement)) return null
+    const panelBox = panel.getBoundingClientRect()
+    const sourceBox = source.getBoundingClientRect()
+    return {
+      panelRight: panelBox.right,
+      sourceRight: sourceBox.right,
+      sourceClientWidth: source.clientWidth,
+      sourceScrollWidth: source.scrollWidth,
+    }
+  })
+  expect(dimensions).not.toBeNull()
+  expect(dimensions?.sourceRight ?? Infinity).toBeLessThanOrEqual(
+    (dimensions?.panelRight ?? 0) + 1,
+  )
+  expect(dimensions?.sourceScrollWidth ?? 0).toBeLessThanOrEqual(
+    (dimensions?.sourceClientWidth ?? 0) + 1,
+  )
+})
+
+Then('the proposal review queue uses rows instead of cards', async ({ page }) => {
+  await expect(page.locator('.proposal-queue')).toBeVisible()
+  await expect(page.locator('.proposal-row').first()).toBeVisible()
+  await expect(page.locator('.proposal-grid')).toHaveCount(0)
 })
 
 Then('I can collapse the {string} directory', async ({ page }, folder: string) => {

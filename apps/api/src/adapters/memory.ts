@@ -1,5 +1,6 @@
 import type {
   Author,
+  DocumentListResponse,
   DocumentSummary,
   DocumentRevision,
   DocumentResponse,
@@ -10,6 +11,7 @@ import type {
   HistoryEvent,
   HistoryInput,
   HistoryResponse,
+  ListDocumentsInput,
   ListProposalsInput,
   NavigationInput,
   NavigationItem,
@@ -300,6 +302,37 @@ class MemoryKnowledgeReader implements KnowledgeReader {
     }
   }
 
+  public async listDocuments(
+    input: ListDocumentsInput,
+  ): Promise<DocumentListResponse> {
+    const query = input.q?.trim().toLocaleLowerCase(input.locale) ?? ''
+    const filtered = this.store.documents
+      .filter(
+        (document) =>
+          isPublic(document) &&
+          document.locale === input.locale &&
+          (input.folderId === undefined || document.folderId === input.folderId) &&
+          (input.type === undefined || document.type === input.type) &&
+          (input.status === undefined || document.status === input.status) &&
+          (!query ||
+            [document.title, document.excerpt, ...document.tags].some((value) =>
+              value.toLocaleLowerCase(input.locale).includes(query),
+            )),
+      )
+      .sort((left, right) =>
+        input.sort === 'title'
+          ? left.title.localeCompare(right.title, input.locale)
+          : input.sort === 'type'
+            ? left.type.localeCompare(right.type, input.locale)
+            : right.updatedAt.localeCompare(left.updatedAt),
+      )
+    const result = page(filtered, input.cursor, input.limit)
+    return {
+      items: result.items.map(toDocumentSummary),
+      pageInfo: result.pageInfo,
+    }
+  }
+
   public async getDocument(input: GetDocumentInput): Promise<DocumentResponse | null> {
     const document = this.store.documents.find(
       (candidate) =>
@@ -436,17 +469,38 @@ class MemoryKnowledgeReader implements KnowledgeReader {
 
   public async getHistory(input: HistoryInput): Promise<HistoryResponse> {
     const publicDocumentIds = new Set(
-      this.store.documents.filter(isPublic).map((document) => document.id),
+      this.store.documents
+        .filter(
+          (document) =>
+            isPublic(document) &&
+            (input.locale === undefined || document.locale === input.locale),
+        )
+        .map((document) => document.id),
     )
+    const normalizedQuery = input.q?.toLocaleLowerCase()
     const filtered = this.store.history.filter(
       (event) =>
         (event.documentId === null || publicDocumentIds.has(event.documentId)) &&
         (input.documentId === undefined || event.documentId === input.documentId) &&
         (input.proposalId === undefined || event.proposalId === input.proposalId) &&
-        (input.type === undefined || event.type === input.type),
+        (input.type === undefined || event.type === input.type) &&
+        (input.category === undefined ||
+          historyCategory(event.type) === input.category) &&
+        (normalizedQuery === undefined ||
+          `${event.summary} ${event.actor.name}`
+            .toLocaleLowerCase()
+            .includes(normalizedQuery)),
     )
     return page(filtered, input.cursor, input.limit)
   }
+}
+
+function historyCategory(
+  type: HistoryEvent['type'],
+): 'proposal' | 'publish' | 'create' {
+  if (type === 'document_published') return 'create'
+  if (type === 'document_updated') return 'publish'
+  return 'proposal'
 }
 
 const proposals: readonly Proposal[] = [
@@ -459,6 +513,7 @@ const proposals: readonly Proposal[] = [
     createdAt: checkedAt,
     updatedAt: checkedAt,
     changeCount: 1,
+    createsDocument: false,
     changes: [
       {
         id: 'change-workflow',
@@ -487,6 +542,7 @@ const proposals: readonly Proposal[] = [
     createdAt: checkedAt,
     updatedAt: checkedAt,
     changeCount: 1,
+    createsDocument: false,
     changes: [
       {
         id: 'change-incident',
@@ -514,27 +570,20 @@ class MemoryProposalReader implements ProposalReader {
       : this.records
     const result = page(filtered, input.cursor, input.limit)
     return {
-      items: result.items.map(
-        ({
-          id,
-          title,
-          summary,
-          status,
-          author,
-          createdAt,
-          updatedAt,
-          changeCount,
-        }) => ({
-          id,
-          title,
-          summary,
-          status,
-          author,
-          createdAt,
-          updatedAt,
-          changeCount,
-        }),
-      ),
+      items: result.items.map((proposal) => ({
+        id: proposal.id,
+        title: proposal.title,
+        summary: proposal.summary,
+        status: proposal.status,
+        author: proposal.author,
+        createdAt: proposal.createdAt,
+        updatedAt: proposal.updatedAt,
+        changeCount: proposal.changeCount,
+        createsDocument: proposal.changes.some(
+          (change) =>
+            change.changeType === 'added' && change.target.documentId === null,
+        ),
+      })),
       pageInfo: result.pageInfo,
     }
   }

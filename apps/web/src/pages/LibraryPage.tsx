@@ -1,9 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useDeferredValue, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
-import { useNavigationQuery, queryKeys, useLocale } from '../shared/api/hooks'
+import {
+  useDocumentsQuery,
+  useNavigationQuery,
+  queryKeys,
+  useLocale,
+} from '../shared/api/hooks'
 import { useAppClients } from '../shared/api/client'
 import type {
   DocumentKind,
@@ -18,11 +23,12 @@ import {
   LoadingState,
   ModalDialog,
   PageHeading,
+  Pagination,
   StatusBadge,
   formatDate,
 } from '../shared/ui'
 
-const kinds: DocumentKind[] = [
+const kinds: Array<Exclude<DocumentKind, 'folder'>> = [
   'incident',
   'decision',
   'runbook',
@@ -43,60 +49,41 @@ export function LibraryPage() {
   const navigation = useNavigationQuery()
   const folderId = params.get('folder') ?? ''
   const query = params.get('q') ?? ''
-  const kind = params.get('type') as DocumentKind | null
+  const deferredQuery = useDeferredValue(query)
+  const kind = params.get('type') as Exclude<DocumentKind, 'folder'> | null
   const status = params.get('status') as DocumentStatus | null
-  const sort = params.get('sort') ?? 'updated'
+  const sort =
+    params.get('sort') === 'title' || params.get('sort') === 'kind'
+      ? (params.get('sort') as 'title' | 'kind')
+      : 'updated'
+  const cursor = params.get('cursor') ?? undefined
   const view = params.get('view') === 'cards' ? 'cards' : 'list'
   const isNew = params.get('new') === '1'
   const folder = navigation.data?.folders
     .flatMap((item) => [item, ...item.children])
     .find((item) => item.id === folderId)
-
-  const documents = useMemo(() => {
-    const source = navigation.data?.documents ?? []
-    const normalizedQuery = query
-      .trim()
-      .toLocaleLowerCase(locale === 'pt-BR' ? 'pt-BR' : 'en-US')
-    const filtered = source.filter((document) => {
-      const matchesFolder =
-        !folderId ||
-        document.folderId === folderId ||
-        document.folderPath.startsWith(folder?.path ? `${folder.path}/` : '\u0000')
-      const matchesQuery =
-        !normalizedQuery ||
-        [document.title, document.summary, document.folderPath, ...document.tags].some(
-          (value) =>
-            value
-              .toLocaleLowerCase(locale === 'pt-BR' ? 'pt-BR' : 'en-US')
-              .includes(normalizedQuery),
-        )
-      const matchesKind = !kind || (kinds.includes(kind) && document.kind === kind)
-      const matchesStatus =
-        !status || (statuses.includes(status) && document.status === status)
-      return matchesFolder && matchesQuery && matchesKind && matchesStatus
-    })
-    return [...filtered].sort((left, right) =>
-      sort === 'title'
-        ? left.title.localeCompare(right.title, locale)
-        : sort === 'kind'
-          ? left.kind.localeCompare(right.kind, locale)
-          : new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
-    )
-  }, [
-    folder?.path,
-    folderId,
-    kind,
-    locale,
-    navigation.data?.documents,
-    query,
+  const documentsQuery = useDocumentsQuery({
+    folderId: folderId || undefined,
+    query: deferredQuery || undefined,
+    kind: kind && kinds.includes(kind) ? kind : undefined,
+    status: status && statuses.includes(status) ? status : undefined,
     sort,
-    status,
-  ])
+    cursor,
+  })
+  const documents = documentsQuery.data?.items ?? []
 
   const updateParam = (name: string, value: string) => {
     const next = new URLSearchParams(params)
     if (value) next.set(name, value)
     else next.delete(name)
+    if (!['view', 'new'].includes(name)) next.delete('cursor')
+    setParams(next)
+  }
+
+  const updateCursor = (nextCursor: string | null) => {
+    const next = new URLSearchParams(params)
+    if (nextCursor && nextCursor !== '0') next.set('cursor', nextCursor)
+    else next.delete('cursor')
     setParams(next)
   }
 
@@ -106,9 +93,16 @@ export function LibraryPage() {
     setParams(next)
   }
 
-  if (navigation.isLoading) return <LoadingState />
-  if (navigation.isError)
-    return <ErrorState onRetry={() => void navigation.refetch()} />
+  if (navigation.isLoading || documentsQuery.isLoading) return <LoadingState />
+  if (navigation.isError || documentsQuery.isError)
+    return (
+      <ErrorState
+        onRetry={() => {
+          void navigation.refetch()
+          void documentsQuery.refetch()
+        }}
+      />
+    )
   if (!navigation.data) return <EmptyState title={t('library.emptyTitle')} />
 
   return (
@@ -135,7 +129,11 @@ export function LibraryPage() {
           }
         />
         <div className="toolbar" aria-label={t('library.search')}>
-          <strong>{t('library.results', { count: documents.length })}</strong>
+          <strong>
+            {t('library.results', {
+              count: documentsQuery.data?.pageInfo.totalCount ?? documents.length,
+            })}
+          </strong>
           <div className="library-controls">
             <label className="library-search">
               <Icon name="search" />
@@ -222,12 +220,21 @@ export function LibraryPage() {
             </Button>
           </div>
         ) : null}
-        {documents.length ? (
-          view === 'cards' ? (
-            <LibraryCards documents={documents} />
-          ) : (
-            <LibraryTable documents={documents} />
-          )
+        {documents.length && documentsQuery.data ? (
+          <>
+            {view === 'cards' ? (
+              <LibraryCards documents={documents} />
+            ) : (
+              <LibraryTable documents={documents} />
+            )}
+            <Pagination
+              pageInfo={documentsQuery.data.pageInfo}
+              pageSize={documents.length}
+              cursor={cursor}
+              onPrevious={updateCursor}
+              onNext={updateCursor}
+            />
+          </>
         ) : (
           <EmptyState
             title={t('library.emptyTitle')}

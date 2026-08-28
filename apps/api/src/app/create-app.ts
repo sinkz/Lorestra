@@ -7,6 +7,7 @@ import { createMemoryDependencies, type ApiDependencies } from '../adapters/memo
 import { registerHealth } from '../slices/health/route.js'
 import { registerReadNavigation } from '../slices/read-navigation/route.js'
 import { registerReadDocument } from '../slices/read-document/route.js'
+import { registerListDocuments } from '../slices/list-documents/route.js'
 import { registerReadGraph } from '../slices/read-graph/route.js'
 import { registerSearchKnowledge } from '../slices/search-knowledge/route.js'
 import { registerListProposals } from '../slices/list-proposals/route.js'
@@ -54,6 +55,7 @@ export function createApp(
 
   registerHealth(app, dependencies)
   registerReadNavigation(app, dependencies)
+  registerListDocuments(app, dependencies)
   registerReadDocument(app, dependencies)
   registerReadGraph(app, dependencies)
   registerSearchKnowledge(app, dependencies)

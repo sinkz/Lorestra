@@ -36,7 +36,10 @@ export type PaginationInput = z.infer<typeof PaginationInputSchema>
 
 export const PageInfoSchema = z.object({
   nextCursor: z.string().nullable(),
+  previousCursor: z.string().nullable(),
   hasNextPage: z.boolean(),
+  hasPreviousPage: z.boolean(),
+  totalCount: z.number().int().min(0),
 })
 export type PageInfo = z.infer<typeof PageInfoSchema>
 

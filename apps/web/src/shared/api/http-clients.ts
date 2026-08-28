@@ -1,4 +1,5 @@
 import {
+  DocumentListResponseSchema,
   DocumentResponseSchema,
   GraphResponseSchema,
   HistoryResponseSchema,
@@ -12,6 +13,7 @@ import {
   type GraphInput,
   type HistoryInput,
   type KnowledgeClient,
+  type ListDocumentsInput,
   type ListProposalsInput,
   type NavigationInput,
   type ProposalClient,
@@ -57,6 +59,16 @@ class HttpKnowledgeClient implements KnowledgeClient {
 
   public getNavigation(input: NavigationInput = { locale: 'en' }) {
     return request(this.baseUrl, `/navigation${query(input)}`, NavigationResponseSchema)
+  }
+
+  public listDocuments(
+    input: ListDocumentsInput = { locale: 'en', limit: 20, sort: 'updated' },
+  ) {
+    return request(
+      this.baseUrl,
+      `/documents${query(input)}`,
+      DocumentListResponseSchema,
+    )
   }
 
   public async getDocument(input: GetDocumentInput) {

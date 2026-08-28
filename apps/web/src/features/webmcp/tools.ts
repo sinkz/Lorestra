@@ -522,13 +522,14 @@ export function createLorestraWebMcpTools(
           'all',
         )
         const limit = boundedInteger(input.limit, 20, MAX_PROPOSALS, 'limit')
-        const allProposals = await clients.proposals.list({
+        const result = await clients.proposals.list({
           status,
           locale: localeFrom(input, getLocale()),
+          limit,
         })
-        const proposals = allProposals.slice(0, limit)
+        const items = result.items.slice(0, limit)
         return {
-          proposals: proposals.map(
+          proposals: items.map(
             ({
               id,
               number,
@@ -549,9 +550,9 @@ export function createLorestraWebMcpTools(
               changeCount,
             }),
           ),
-          total: allProposals.length,
-          returned: proposals.length,
-          truncated: proposals.length < allProposals.length,
+          total: result.pageInfo.totalCount,
+          returned: items.length,
+          truncated: result.pageInfo.hasNextPage || result.items.length > limit,
         }
       },
     }),

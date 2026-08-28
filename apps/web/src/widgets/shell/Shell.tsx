@@ -87,7 +87,7 @@ export function Shell() {
       to: '/proposals',
       key: 'proposals',
       icon: 'proposals' as const,
-      count: proposals.data?.length,
+      count: proposals.data?.pageInfo.totalCount,
     },
     { to: '/history', key: 'history', icon: 'history' as const },
   ]

@@ -1,4 +1,9 @@
-import type { DocumentResponse, GetDocumentInput } from './document.js'
+import type {
+  DocumentListResponse,
+  DocumentResponse,
+  GetDocumentInput,
+  ListDocumentsInput,
+} from './document.js'
 import type { GraphInput, GraphResponse } from './graph.js'
 import type { HistoryInput, HistoryResponse } from './history.js'
 import type {
@@ -15,6 +20,7 @@ import type { SearchInput, SearchResponse } from './search.js'
 /** Stable consumer seam. Implementations may be mock, HTTP, or Cloudflare-backed. */
 export interface KnowledgeClient {
   getNavigation(input?: NavigationInput): Promise<NavigationResponse>
+  listDocuments(input?: ListDocumentsInput): Promise<DocumentListResponse>
   getDocument(input: GetDocumentInput): Promise<DocumentResponse | null>
   getGraph(input?: GraphInput): Promise<GraphResponse>
   search(input: SearchInput): Promise<SearchResponse>

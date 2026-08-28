@@ -23,6 +23,7 @@ import type {
   DiffLine,
   Document,
   DocumentKind,
+  DocumentListData,
   DocumentSummary,
   FolderNode,
   GraphSnapshot,
@@ -30,8 +31,10 @@ import type {
   HistoryEvent,
   Locale,
   NavigationData,
+  PageInfo,
   Proposal,
   ProposalFile,
+  ProposalListData,
   ProposalStatus,
   SearchData,
   SearchResult,
@@ -50,6 +53,17 @@ const documentKind = (
   if (type === 'document') return tags.includes('docs') ? 'docs' : 'note'
   return type
 }
+
+const contractDocumentType = (
+  kind: Exclude<DocumentKind, 'folder'>,
+): ContractDocumentSummary['type'] => {
+  if (kind === 'guide') return 'lesson'
+  if (kind === 'runbook' || kind === 'process') return 'process'
+  if (kind === 'docs') return 'document'
+  return kind
+}
+
+const mapPageInfo = (pageInfo: PageInfo): PageInfo => ({ ...pageInfo })
 
 function folderPath(
   folderId: string,
@@ -222,7 +236,7 @@ function mapGraph(response: GraphResponse, navigation: NavigationData): GraphSna
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      relation: edge.kind === 'contains' ? 'backlink' : 'references',
+      relation: edge.kind === 'contains' ? 'contains' : 'references',
     })),
   }
 }
@@ -288,6 +302,7 @@ function mapProposalSummary(summary: ProposalSummary): Proposal {
     createdAt: summary.createdAt,
     updatedAt: summary.updatedAt,
     changeCount: summary.changeCount,
+    createsDocument: summary.createsDocument,
     files: [],
     checks: [],
     documentIds: [],
@@ -364,6 +379,48 @@ export function createKnowledgeAdapter(client: KnowledgeClient): AppKnowledgeCli
     getNavigation(input) {
       return getNavigation(input?.locale ?? 'en')
     },
+    async listDocuments(input) {
+      const locale = input?.locale ?? 'en'
+      const [response, navigation] = await Promise.all([
+        client.listDocuments({
+          locale,
+          folderId: input?.folderId,
+          q: input?.query || undefined,
+          type: input?.kind ? contractDocumentType(input.kind) : undefined,
+          status: input?.status,
+          sort: input?.sort === 'kind' ? 'type' : (input?.sort ?? 'updated'),
+          cursor: input?.cursor,
+          limit: input?.limit ?? 50,
+        }),
+        getNavigation(locale),
+      ])
+      const folders = new Map(
+        navigation.folders.flatMap(function collect(folder): Array<[
+          string,
+          NavigationItem,
+        ]> {
+          const item: NavigationItem = {
+            id: folder.id,
+            parentId: folder.parentId ?? null,
+            kind: 'folder',
+            documentId: null,
+            slug: folder.id,
+            title: folder.name,
+            locale,
+            order: 0,
+            hasChildren: folder.children.length > 0 || folder.documentCount > 0,
+          }
+          return [
+            [folder.id, item],
+            ...folder.children.flatMap(collect),
+          ]
+        }),
+      )
+      return {
+        items: response.items.map((document) => mapDocumentSummary(document, folders)),
+        pageInfo: mapPageInfo(response.pageInfo),
+      } satisfies DocumentListData
+    },
     async getDocument(input) {
       const locale = input.locale ?? 'en'
       const response = await client.getDocument({
@@ -402,7 +459,16 @@ export function createKnowledgeAdapter(client: KnowledgeClient): AppKnowledgeCli
       const [response, navigation] = await Promise.all([
         client.getHistory({
           documentId: input?.documentId,
-          limit: 100,
+          cursor: input?.cursor,
+          limit: input?.limit ?? 30,
+          locale,
+          q: input?.query || undefined,
+          category:
+            input?.type === 'proposal' ||
+            input?.type === 'publish' ||
+            input?.type === 'create'
+              ? input.type
+              : undefined,
         }),
         getNavigation(locale),
       ])
@@ -417,8 +483,9 @@ export function createKnowledgeAdapter(client: KnowledgeClient): AppKnowledgeCli
         )
       return {
         branch: 'main',
-        totalVersions: events.length,
+        totalVersions: response.pageInfo.totalCount,
         events,
+        pageInfo: mapPageInfo(response.pageInfo),
       } satisfies HistoryData
     },
   }
@@ -447,8 +514,15 @@ export function createProposalAdapter(
             ? 'changes_requested'
             : input.status
           : undefined
-      const response = await client.list({ status, limit: 100 })
-      return response.items.map(mapProposalSummary)
+      const response = await client.list({
+        status,
+        cursor: input?.cursor,
+        limit: input?.limit ?? 30,
+      })
+      return {
+        items: response.items.map(mapProposalSummary),
+        pageInfo: mapPageInfo(response.pageInfo),
+      } satisfies ProposalListData
     },
     async get(input) {
       const proposal = await client.get({ proposalId: input.proposalId })

@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { useProposalsQuery } from '../shared/api/hooks'
@@ -10,6 +9,7 @@ import {
   Icon,
   LoadingState,
   PageHeading,
+  Pagination,
   StatusBadge,
   formatRelativeDate,
 } from '../shared/ui'
@@ -22,27 +22,35 @@ const filters: Array<ProposalStatus | 'all'> = [
   'merged',
 ]
 
+const PAGE_SIZE = 30
+
 export function ProposalsPage() {
   const { t } = useTranslation()
   const locale = useCurrentLocale()
   const [params, setParams] = useSearchParams()
   const status = normalizeStatus(params.get('status'))
-  const proposals = useProposalsQuery(status)
-  const visible = useMemo(() => {
-    const items = proposals.data ?? []
-    return status === 'all' ? items : items.filter((item) => item.status === status)
-  }, [proposals.data, status])
+  const cursor = params.get('cursor') ?? undefined
+  const proposals = useProposalsQuery(status, cursor)
+  const visible = proposals.data?.items ?? []
 
-  const changeStatus = (next: ProposalStatus | 'all') => {
+  const updateCursor = (nextCursor: string | null) => {
+    const next = new URLSearchParams(params)
+    if (nextCursor && nextCursor !== '0') next.set('cursor', nextCursor)
+    else next.delete('cursor')
+    setParams(next)
+  }
+
+  const changeStatus = (nextStatus: ProposalStatus | 'all') => {
     const nextParams = new URLSearchParams(params)
-    if (next === 'all') nextParams.delete('status')
-    else nextParams.set('status', next)
-    nextParams.delete('proposal')
+    if (nextStatus === 'all') nextParams.delete('status')
+    else nextParams.set('status', nextStatus)
+    nextParams.delete('cursor')
     setParams(nextParams)
   }
 
   if (proposals.isLoading) return <LoadingState />
-  if (proposals.isError) return <ErrorState onRetry={() => void proposals.refetch()} />
+  if (proposals.isError)
+    return <ErrorState onRetry={() => void proposals.refetch()} />
 
   return (
     <section className="page-surface" aria-labelledby="page-heading">
@@ -75,29 +83,55 @@ export function ProposalsPage() {
                 {t(
                   `proposals.${item === 'changes-requested' ? 'changesRequested' : item}`,
                 )}
+                {status === item && proposals.data ? (
+                  <span className="filter-count">
+                    {proposals.data.pageInfo.totalCount}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
           <span className="muted-paper">
             {t('proposals.awaiting', {
               count: visible.filter(
-                (item) => item.status === 'open' || item.status === 'changes-requested',
+                (item) =>
+                  item.status === 'open' || item.status === 'changes-requested',
               ).length,
             })}
           </span>
         </div>
-        {visible.length ? (
-          <div className="proposal-layout proposal-layout-list">
-            <div className="proposal-list" aria-label={t('proposals.listLabel')}>
+        {visible.length && proposals.data ? (
+          <div className="proposal-queue-shell">
+            <header className="proposal-queue-header">
+              <div>
+                <span className="proposal-queue-icon" aria-hidden="true">
+                  ⇄
+                </span>
+                <div>
+                  <strong>{t('proposals.reviewQueue')}</strong>
+                  <span>
+                    {t('proposals.queueSummary', {
+                      count: proposals.data.pageInfo.totalCount,
+                    })}
+                  </span>
+                </div>
+              </div>
+              <span className="proposal-queue-policy">
+                {t('proposals.queuePolicy')}
+              </span>
+            </header>
+            <div className="proposal-queue" aria-label={t('proposals.listLabel')}>
               {visible.map((proposal) => (
-                <ProposalCard key={proposal.id} proposal={proposal} locale={locale} />
+                <ProposalRow key={proposal.id} proposal={proposal} locale={locale} />
               ))}
             </div>
-            <div className="proposal-list-note">
-              <span className="eyebrow">{t('proposals.reviewSummary')}</span>
-              <h2>{t('proposals.noSelection')}</h2>
-              <p>{t('proposals.detailPrompt')}</p>
-            </div>
+            <Pagination
+              pageInfo={proposals.data.pageInfo}
+              pageSize={Math.min(PAGE_SIZE, visible.length)}
+              cursor={cursor}
+              onPrevious={updateCursor}
+              onNext={updateCursor}
+            />
           </div>
         ) : (
           <EmptyState
@@ -117,7 +151,7 @@ export function ProposalsPage() {
   )
 }
 
-function ProposalCard({
+function ProposalRow({
   proposal,
   locale,
 }: {
@@ -126,23 +160,39 @@ function ProposalCard({
 }) {
   const { t } = useTranslation()
   return (
-    <Link
-      className="proposal-card"
-      to={`/proposals/${encodeURIComponent(proposal.id)}`}
-      aria-label={t('proposals.openProposal', { number: proposal.number })}
-    >
-      <div className="proposal-card-top">
-        <span className="proposal-number">#{proposal.number}</span>
+    <article className="proposal-row" data-status={proposal.status}>
+      <span className="proposal-state-icon" aria-hidden="true">
+        <span />
+      </span>
+      <Link
+        className="proposal-row-link"
+        to={`/proposals/${encodeURIComponent(proposal.id)}`}
+        aria-label={t('proposals.openProposal', { number: proposal.number })}
+      >
+        <div className="proposal-row-title">
+          <strong>{proposal.title}</strong>
+          <span className="proposal-number">#{proposal.number}</span>
+          {proposal.createsDocument ? (
+            <span className="proposal-new-label">{t('proposals.newDocument')}</span>
+          ) : null}
+        </div>
+        <p>{proposal.summary || proposal.body.slice(0, 180)}</p>
+        <div className="proposal-row-meta">
+          <span>
+            {t('proposals.updatedBy', {
+              date: formatRelativeDate(proposal.updatedAt, locale),
+              author: proposal.author,
+            })}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>{t('proposals.changeCount', { count: proposal.changeCount })}</span>
+        </div>
+      </Link>
+      <div className="proposal-row-status">
         <StatusBadge status={proposal.status} />
+        <Icon name="arrow" />
       </div>
-      <h2>{proposal.title}</h2>
-      <p>{proposal.summary || proposal.body.slice(0, 130)}</p>
-      <div className="proposal-card-meta">
-        <span>{proposal.author}</span>
-        <span>{formatRelativeDate(proposal.updatedAt, locale)}</span>
-        <span>{t('proposals.files', { count: proposal.changeCount })}</span>
-      </div>
-    </Link>
+    </article>
   )
 }
 

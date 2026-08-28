@@ -10,6 +10,7 @@ const proposal: Proposal = {
   createdAt: '2026-08-28T00:00:00.000Z',
   updatedAt: '2026-08-28T00:00:00.000Z',
   changeCount: 1,
+  createsDocument: false,
   changes: [
     {
       id: 'change-1',

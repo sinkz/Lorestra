@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import {
   useHistoryQuery,
@@ -20,7 +20,10 @@ export function HistoryDetailPage() {
   const { t } = useTranslation()
   const locale = useLocale()
   const { eventId } = useParams<{ eventId: string }>()
-  const history = useHistoryQuery()
+  const [params] = useSearchParams()
+  const cursor = params.get('cursor') ?? undefined
+  const history = useHistoryQuery(undefined, cursor)
+  const historyHref = cursor ? `/history?cursor=${encodeURIComponent(cursor)}` : '/history'
   const navigation = useNavigationQuery()
   const event = useMemo(
     () => history.data?.events.find((item) => item.id === eventId),
@@ -57,7 +60,7 @@ export function HistoryDetailPage() {
         <EmptyState
           title={t('history.noEvents')}
           action={
-            <Link className="button button-secondary" to="/history">
+            <Link className="button button-secondary" to={historyHref}>
               <Icon name="back" />
               {t('history.back')}
             </Link>
@@ -69,7 +72,7 @@ export function HistoryDetailPage() {
   return (
     <section className="page-surface" aria-labelledby="page-heading">
       <div className="page-inner history-detail">
-        <Link className="button button-secondary" to="/history">
+        <Link className="button button-secondary" to={historyHref}>
           <Icon name="back" />
           {t('history.back')}
         </Link>
@@ -81,7 +84,13 @@ export function HistoryDetailPage() {
           <h1 id="page-heading" tabIndex={-1}>
             {event.title}
           </h1>
-          <p>{event.body || t('history.immutable')}</p>
+          <p>
+            {event.revisionId
+              ? t('history.publishedRevision', {
+                  version: event.revisionId.replace(/^v/, ''),
+                })
+              : event.body || t('history.immutable')}
+          </p>
           <div className="history-detail-meta">
             <span>{event.actor}</span>
             <time dateTime={event.createdAt}>
@@ -133,7 +142,7 @@ export function HistoryDetailPage() {
               )}
             </div>
           ) : null}
-          {event.body ? (
+          {event.body && !event.revisionId ? (
             <div className="history-detail-body">
               <MarkdownContent source={event.body} />
             </div>

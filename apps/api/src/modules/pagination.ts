@@ -13,12 +13,16 @@ export function page<T>(
   const result = items.slice(start, start + limit)
   const next = start + result.length
   const hasNextPage = next < items.length
+  const hasPreviousPage = start > 0
 
   return {
     items: result,
     pageInfo: {
       hasNextPage,
       nextCursor: hasNextPage ? String(next) : null,
+      hasPreviousPage,
+      previousCursor: hasPreviousPage ? String(Math.max(0, start - limit)) : null,
+      totalCount: items.length,
     },
   }
 }

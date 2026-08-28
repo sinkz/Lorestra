@@ -1,0 +1,337 @@
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from 'react'
+import { Link, useLocation } from 'react-router'
+import { useVirtualizer } from '@tanstack/react-virtual'
+import { useTranslation } from 'react-i18next'
+import type { DocumentSummary, FolderNode } from '../../shared/model/types'
+import { Icon } from '../../shared/ui'
+import { useShellStore } from '../../shared/store/useShellStore'
+
+type TreeEntry = {
+  kind: 'folder' | 'document'
+  id: string
+  name: string
+  depth: number
+  document?: DocumentSummary
+  hasChildren?: boolean
+  itemCount?: number
+}
+
+function flattenTree(
+  folders: FolderNode[],
+  documents: DocumentSummary[],
+  expanded: Record<string, boolean>,
+  depth = 1,
+): TreeEntry[] {
+  const entries: TreeEntry[] = []
+  const docsByFolder = new Map<string, DocumentSummary[]>()
+  for (const document of documents) {
+    const list = docsByFolder.get(document.folderId) ?? []
+    list.push(document)
+    docsByFolder.set(document.folderId, list)
+  }
+  const countDocuments = (node: FolderNode): number =>
+    (docsByFolder.get(node.id)?.length ?? 0) +
+    node.children.reduce((total, child) => total + countDocuments(child), 0)
+  const visit = (nodes: FolderNode[], currentDepth: number) => {
+    for (const node of nodes) {
+      const itemCount = countDocuments(node)
+      if (itemCount === 0) continue
+      const hasChildren =
+        node.children.length > 0 || (docsByFolder.get(node.id)?.length ?? 0) > 0
+      entries.push({
+        kind: 'folder',
+        id: node.id,
+        name: node.name,
+        depth: currentDepth,
+        hasChildren,
+        itemCount,
+      })
+      if (!(expanded[node.id] ?? true)) continue
+      visit(node.children, currentDepth + 1)
+      for (const document of docsByFolder.get(node.id) ?? []) {
+        entries.push({
+          kind: 'document',
+          id: document.id,
+          name: document.title,
+          depth: currentDepth + 1,
+          document,
+        })
+      }
+    }
+  }
+  visit(folders, depth)
+  return entries
+}
+
+export function FolderTree({
+  folders,
+  documents,
+}: {
+  folders: FolderNode[]
+  documents: DocumentSummary[]
+}) {
+  const { t } = useTranslation()
+  const location = useLocation()
+  const expandedFolders = useShellStore((state) => state.expandedFolders)
+  const toggleFolder = useShellStore((state) => state.toggleFolder)
+  const parentRef = useRef<HTMLDivElement>(null)
+  const entries = useMemo(
+    () => flattenTree(folders, documents, expandedFolders),
+    [documents, expandedFolders, folders],
+  )
+  const virtualizer = useVirtualizer({
+    count: entries.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 38,
+    overscan: 8,
+    enabled: entries.length > 80,
+  })
+  const visibleEntries =
+    entries.length > 80
+      ? virtualizer.getVirtualItems()
+      : entries.map((_, index) => ({ index, start: index * 38, size: 38 }))
+  const selectedIndex = entries.findIndex(
+    (entry) =>
+      entry.kind === 'document' &&
+      entry.document &&
+      location.pathname.includes(`/documents/${entry.document.slug}`),
+  )
+  const [activeIndex, setActiveIndex] = useState(selectedIndex >= 0 ? selectedIndex : 0)
+  const rowRefs = useRef<Array<HTMLElement | null>>([])
+
+  useEffect(() => {
+    if (!entries.length) {
+      setActiveIndex(0)
+      return
+    }
+    if (selectedIndex >= 0) setActiveIndex(selectedIndex)
+    else setActiveIndex((current) => Math.min(current, entries.length - 1))
+  }, [entries.length, selectedIndex])
+
+  const focusRow = (index: number) => {
+    if (!entries.length) return
+    const nextIndex = Math.max(0, Math.min(index, entries.length - 1))
+    setActiveIndex(nextIndex)
+    if (entries.length > 80) virtualizer.scrollToIndex(nextIndex, { align: 'auto' })
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => rowRefs.current[nextIndex]?.focus()),
+    )
+  }
+
+  const onTreeKeyDown = (event: KeyboardEvent<HTMLElement>, index: number) => {
+    const entry = entries[index]
+    if (!entry) return
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      focusRow(index + 1)
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      focusRow(index - 1)
+      return
+    }
+    if (event.key === 'Home') {
+      event.preventDefault()
+      focusRow(0)
+      return
+    }
+    if (event.key === 'End') {
+      event.preventDefault()
+      focusRow(entries.length - 1)
+      return
+    }
+    const open = entry.kind === 'folder' && (expandedFolders[entry.id] ?? true)
+    if (event.key === 'ArrowRight' && entry.kind === 'folder') {
+      event.preventDefault()
+      if (!open) toggleFolder(entry.id)
+      else if (entries[index + 1]?.depth > entry.depth) focusRow(index + 1)
+      return
+    }
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      if (entry.kind === 'folder' && open) {
+        toggleFolder(entry.id)
+        return
+      }
+      for (let parentIndex = index - 1; parentIndex >= 0; parentIndex -= 1) {
+        if (
+          entries[parentIndex].kind === 'folder' &&
+          entries[parentIndex].depth === entry.depth - 1
+        ) {
+          focusRow(parentIndex)
+          return
+        }
+      }
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      if (entry.kind === 'folder') {
+        event.preventDefault()
+        rowRefs.current[index]
+          ?.querySelector<HTMLAnchorElement>('.tree-folder-link')
+          ?.click()
+      }
+    }
+  }
+
+  return (
+    <div
+      className="folder-tree-wrap"
+      ref={parentRef}
+      role="tree"
+      aria-label={t('folders.title')}
+    >
+      {entries.length > 80 ? (
+        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+          {visibleEntries.map((virtualRow) => {
+            const entry = entries[virtualRow.index]
+            return (
+              <TreeRow
+                key={`${entry.kind}-${entry.id}`}
+                entry={entry}
+                location={location.pathname}
+                t={t}
+                toggleFolder={toggleFolder}
+                expandedFolders={expandedFolders}
+                active={activeIndex === virtualRow.index}
+                rowRef={(node) => {
+                  rowRefs.current[virtualRow.index] = node
+                }}
+                onFocus={() => setActiveIndex(virtualRow.index)}
+                onKeyDown={(event) => onTreeKeyDown(event, virtualRow.index)}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  transform: `translateY(${virtualRow.start}px)`,
+                  width: '100%',
+                }}
+              />
+            )
+          })}
+        </div>
+      ) : (
+        visibleEntries.map((virtualRow) => (
+          <TreeRow
+            key={`${entries[virtualRow.index].kind}-${entries[virtualRow.index].id}`}
+            entry={entries[virtualRow.index]}
+            location={location.pathname}
+            t={t}
+            toggleFolder={toggleFolder}
+            expandedFolders={expandedFolders}
+            active={activeIndex === virtualRow.index}
+            rowRef={(node) => {
+              rowRefs.current[virtualRow.index] = node
+            }}
+            onFocus={() => setActiveIndex(virtualRow.index)}
+            onKeyDown={(event) => onTreeKeyDown(event, virtualRow.index)}
+          />
+        ))
+      )}
+    </div>
+  )
+}
+
+function TreeRow({
+  entry,
+  location,
+  t,
+  toggleFolder,
+  expandedFolders,
+  active,
+  rowRef,
+  onFocus,
+  onKeyDown,
+  style,
+}: {
+  entry: TreeEntry
+  location: string
+  t: ReturnType<typeof useTranslation>['t']
+  toggleFolder: (id: string) => void
+  expandedFolders: Record<string, boolean>
+  active: boolean
+  rowRef: (node: HTMLElement | null) => void
+  onFocus: () => void
+  onKeyDown: (event: KeyboardEvent<HTMLElement>) => void
+  style?: CSSProperties
+}) {
+  if (entry.kind === 'document' && entry.document) {
+    const selected = location.includes(`/documents/${entry.document.slug}`)
+    return (
+      <Link
+        className={`tree-row tree-document ${selected ? 'is-selected' : ''}`}
+        to={`/documents/${encodeURIComponent(entry.document.slug)}?tab=preview`}
+        style={{ '--tree-depth': entry.depth } as CSSProperties}
+        role="treeitem"
+        aria-level={entry.depth}
+        aria-current={selected ? 'page' : undefined}
+        tabIndex={active ? 0 : -1}
+        ref={rowRef as (node: HTMLAnchorElement | null) => void}
+        onFocus={onFocus}
+        onKeyDown={onKeyDown}
+      >
+        <Icon name="file" />
+        <span className="tree-row-name">{entry.name}</span>
+        <span className="tree-row-meta">md</span>
+      </Link>
+    )
+  }
+  const open = entry.hasChildren ? (expandedFolders[entry.id] ?? true) : false
+  return (
+    <div
+      className="tree-folder-row"
+      style={style}
+      role="treeitem"
+      aria-level={entry.depth}
+      aria-expanded={entry.hasChildren ? open : undefined}
+      tabIndex={active ? 0 : -1}
+      ref={rowRef}
+      onFocus={onFocus}
+      onKeyDown={onKeyDown}
+    >
+      <button
+        type="button"
+        className="tree-disclosure"
+        onClick={() => toggleFolder(entry.id)}
+        disabled={!entry.hasChildren}
+        tabIndex={-1}
+        aria-label={
+          open
+            ? t('folders.collapse', { name: entry.name })
+            : t('folders.expand', { name: entry.name })
+        }
+        aria-expanded={entry.hasChildren ? open : undefined}
+      >
+        <span
+          className={`disclosure-glyph ${open ? 'is-open' : ''}`}
+          aria-hidden="true"
+        >
+          ›
+        </span>
+      </button>
+      <Link
+        className="tree-folder-link"
+        to={`/atlas?scope=folder&folder=${encodeURIComponent(entry.id)}`}
+        style={{ '--tree-depth': entry.depth } as CSSProperties}
+        aria-label={t('folders.openFolder', { name: entry.name })}
+        tabIndex={-1}
+      >
+        <Icon name="folder" />
+        <span className="tree-row-name">{entry.name}</span>
+        <span
+          className="tree-row-meta"
+          aria-label={t('folders.documentCount', { count: entry.itemCount })}
+        >
+          {entry.itemCount}
+        </span>
+      </Link>
+    </div>
+  )
+}

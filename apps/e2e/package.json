@@ -1,0 +1,19 @@
+{
+  "name": "@lorestra/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "capture:readme": "node scripts/capture-readme.mjs",
+    "demo:webmcp": "node scripts/webmcp-demo.mjs",
+    "install:browsers": "playwright install --with-deps",
+    "test:e2e": "bddgen && playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/node": "26.4.0",
+    "playwright-bdd": "9.2.0",
+    "typescript": "6.0.3"
+  }
+}

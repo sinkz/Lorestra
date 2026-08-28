@@ -1,0 +1,20 @@
+packages:
+  - apps/*
+  - packages/*
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+  workerd: true
+minimumReleaseAgeExclude:
+  - '@cloudflare/vitest-plugin@1.1.1'
+  - '@cloudflare/workers-types@5.20260828.1'
+  - '@tanstack/query-core@5.102.8'
+  - '@tanstack/react-query@5.102.8'
+  - miniflare@5.20260826.0-alpha || 5.20260828.0-alpha
+  - wrangler@4.127.0 || 4.127.1
+  - '@cloudflare/workerd-darwin-64@1.20260828.1'
+  - '@cloudflare/workerd-darwin-arm64@1.20260828.1'
+  - '@cloudflare/workerd-linux-64@1.20260828.1'
+  - '@cloudflare/workerd-linux-arm64@1.20260828.1'
+  - '@cloudflare/workerd-windows-64@1.20260828.1'
+  - workerd@1.20260828.1

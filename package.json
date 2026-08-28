@@ -1,0 +1,40 @@
+{
+  "name": "@lorestra/root",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=24.12.0 <25"
+  },
+  "scripts": {
+    "build": "pnpm --recursive --if-present build",
+    "check": "pnpm format:check && pnpm lint && pnpm deps:check && pnpm knip && pnpm peers:check && pnpm typecheck && pnpm test && pnpm build",
+    "dev": "pnpm --parallel --recursive --if-present dev",
+    "deps:check": "depcruise --config .dependency-cruiser.cjs apps packages",
+    "demo:webmcp": "pnpm --filter @lorestra/e2e --if-present run demo:webmcp",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "knip": "knip",
+    "lint": "eslint .",
+    "peers:check": "pnpm peers check",
+    "prepare": "husky",
+    "test": "pnpm --recursive --if-present test",
+    "test:e2e": "pnpm --filter @lorestra/e2e --if-present run test:e2e",
+    "test:mutation": "pnpm --filter @lorestra/api --if-present run test:mutation",
+    "typecheck": "pnpm --recursive --if-present typecheck"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "21.2.2",
+    "@commitlint/config-conventional": "21.2.2",
+    "@eslint/js": "10.0.1",
+    "dependency-cruiser": "18.2.0",
+    "eslint": "10.9.1",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "husky": "9.1.7",
+    "knip": "6.32.3",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.68.0"
+  }
+}

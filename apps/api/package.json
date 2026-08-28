@@ -1,0 +1,30 @@
+{
+  "name": "@lorestra/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/runtime/worker.ts",
+  "scripts": {
+    "build": "wrangler deploy --dry-run",
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "test:mutation": "stryker run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "1.6.1",
+    "@lorestra/contracts": "workspace:*",
+    "hono": "4.13.5",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.1.1",
+    "@cloudflare/workers-types": "5.20260828.1",
+    "@stryker-mutator/core": "10.0.0",
+    "@stryker-mutator/vitest-runner": "10.0.0",
+    "typescript": "6.0.3",
+    "vite": "8.2.2",
+    "vitest": "4.1.11",
+    "wrangler": "4.127.1"
+  }
+}

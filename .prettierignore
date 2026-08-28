@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+.wrangler
+playwright-report
+test-results
+.features-gen
+reports
+.stryker-tmp
+docs/plans
+pnpm-lock.yaml
+worker-configuration.d.ts
+.env
+.env.*

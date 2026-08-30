@@ -302,9 +302,7 @@ class MemoryKnowledgeReader implements KnowledgeReader {
     }
   }
 
-  public async listDocuments(
-    input: ListDocumentsInput,
-  ): Promise<DocumentListResponse> {
+  public async listDocuments(input: ListDocumentsInput): Promise<DocumentListResponse> {
     const query = input.q?.trim().toLocaleLowerCase(input.locale) ?? ''
     const filtered = this.store.documents
       .filter(

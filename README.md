@@ -55,7 +55,7 @@ Tool schemas and callbacks reuse the exact same typed application clients as the
 
 ## Product tour
 
-- **Atlas** — switch between a global constellation and a selected document's neighborhood; use the equivalent list view when a graph is not appropriate.
+- **Atlas** — explore a Canvas galaxy map with a rotatable camera: related documents orbit larger hubs, separate neighborhoods stay apart, and real cross-group links become bridges. Switch between the whole vault and a document's neighborhood, or use the equivalent list view.
 - **Library** — scan, sort, and filter portable Markdown documents without stale navigation state; the folder tree virtualizes only beyond its measured threshold.
 - **Document workspace** — alternate between rendered Markdown, source, relations, history, and contextual graph.
 - **Proposals** — review a GitHub-like list, checks, affected files, new-file additions, and exact diffs.
@@ -142,10 +142,13 @@ The test suite concentrates on boundaries that can lose knowledge or violate gov
 - proposal transition guards and revision creation;
 - mock/API adapter behavior;
 - WebMCP registration, bounded search, and proposal safety;
+- deterministic galaxy grouping, bridge provenance, and non-overlapping layouts;
 - eight Playwright/Gherkin smoke journeys across desktop and mobile;
 - targeted Stryker mutation testing for critical backend search and workflow rules.
 
 `pnpm check` runs formatting, lint, dependency boundaries, unused-code analysis, type checking, unit/integration tests, and production builds. E2E and mutation tests are explicit gates so the normal feedback loop stays fast.
+
+`pnpm knip` runs the installed Knip CLI through a small cross-platform wrapper. On Windows it defaults `KNIP_DISABLE_RAW_TRANSFER=1` to avoid oxc's experimental multi-gigabyte memory reservation; all unused-code checks remain enabled. An explicit environment value is preserved, and CLI arguments and exit codes pass through unchanged.
 
 ## Cloudflare path
 

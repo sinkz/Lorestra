@@ -7,32 +7,143 @@ Given('I open Lorestra at {string}', async ({ page }, path: string) => {
   await page.goto(path)
 })
 
+Given('I prefer reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+})
+
 Then('the heading {string} is visible', async ({ page }, heading: string) => {
   await expect(page.getByRole('heading', { name: heading, level: 1 })).toBeVisible()
 })
 
 Then('the knowledge graph has visible nodes', async ({ page }) => {
-  await expect(page.locator('.react-flow__node').first()).toBeVisible()
+  await expect(page.getByLabel('Knowledge graph', { exact: true })).toBeVisible()
+  await expect(page.locator('button.celestial-node').first()).toBeVisible()
 })
 
 When('I open the graph node {string}', async ({ page }, title: string) => {
-  await page.locator('.react-flow__node').filter({ hasText: title }).dblclick()
+  await page.getByRole('button', { name: `Select ${title}`, exact: true }).dblclick()
 })
 
 Then('the knowledge graph is spread across both axes', async ({ page }) => {
-  await page.waitForTimeout(1_100)
-  const boxes = await page.locator('.react-flow__node').evaluateAll((nodes) =>
-    nodes.map((node) => {
-      const box = node.getBoundingClientRect()
-      return { x: box.x, y: box.y }
-    }),
-  )
-  expect(boxes.length).toBeGreaterThan(5)
-  const xs = boxes.map((box) => box.x)
-  const ys = boxes.map((box) => box.y)
-  expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(350)
-  expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(220)
+  await expect(async () => {
+    const viewport = await page.locator('.galaxy-canvas').boundingBox()
+    const positions = await page.locator('button.celestial-node').evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        x: Number.parseFloat(node.getAttribute('data-screen-x') ?? ''),
+        y: Number.parseFloat(node.getAttribute('data-screen-y') ?? ''),
+      })),
+    )
+    expect(viewport).not.toBeNull()
+    expect(positions.length).toBeGreaterThan(5)
+    expect(
+      positions.every(({ x, y }) => Number.isFinite(x) && Number.isFinite(y)),
+    ).toBe(true)
+    const xs = positions.map(({ x }) => x)
+    const ys = positions.map(({ y }) => y)
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(
+      (viewport?.width ?? 0) * 0.4,
+    )
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(
+      (viewport?.height ?? 0) * 0.35,
+    )
+  }).toPass({ timeout: 5_000 })
 })
+
+Then('the knowledge graph exposes separate galaxies', async ({ page }) => {
+  const graph = page.locator('.galaxy-canvas')
+  await expect(graph).toHaveAttribute('data-galaxy-count', /^\d+$/)
+  await expect(graph).toHaveAttribute('data-bridge-count', /^\d+$/)
+  const galaxyIds = await graph
+    .locator('button.celestial-node')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-galaxy-id')))
+  const count = Number(await graph.getAttribute('data-galaxy-count'))
+  expect(count).toBeGreaterThan(1)
+  expect(galaxyIds.every(Boolean)).toBe(true)
+  expect(new Set(galaxyIds).size).toBe(count)
+  await expect(graph.locator('button.celestial-node[data-hub="true"]')).toHaveCount(
+    count,
+  )
+})
+
+When(
+  'I rotate, tilt, and zoom the constellation and reset its view',
+  async ({ page }) => {
+    const graph = page.locator('.galaxy-canvas')
+    const before = {
+      yaw: await graph.getAttribute('data-yaw'),
+      pitch: await graph.getAttribute('data-pitch'),
+      zoom: await graph.getAttribute('data-zoom'),
+    }
+    expect(before.yaw).not.toBeNull()
+    expect(before.pitch).not.toBeNull()
+    expect(before.zoom).not.toBeNull()
+
+    await page.getByRole('button', { name: 'Rotate right', exact: true }).click()
+    await expect(graph).not.toHaveAttribute('data-yaw', before.yaw ?? '')
+    await page.getByRole('button', { name: 'Tilt up', exact: true }).click()
+    await expect(graph).not.toHaveAttribute('data-pitch', before.pitch ?? '')
+    await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
+    await expect
+      .poll(async () => Number(await graph.getAttribute('data-zoom')))
+      .toBeGreaterThan(Number(before.zoom))
+
+    await page.getByRole('button', { name: 'Reset view', exact: true }).click()
+    await expect(graph).toHaveAttribute('data-yaw', before.yaw ?? '')
+    await expect(graph).toHaveAttribute('data-pitch', before.pitch ?? '')
+    await expect(graph).toHaveAttribute('data-zoom', before.zoom ?? '')
+  },
+)
+
+When(
+  'I select the graph node {string} with the keyboard',
+  async ({ page }, title: string) => {
+    const node = page.getByRole('button', { name: `Select ${title}`, exact: true })
+    await node.focus()
+    await expect(node).toBeFocused()
+    await node.press('Enter')
+  },
+)
+
+Then('automatic graph motion is paused', async ({ page }) => {
+  await expect(page.locator('.galaxy-canvas')).toHaveAttribute('data-motion', 'paused')
+  const motion = page.getByRole('button', {
+    name: 'Motion disabled by your system preference',
+    exact: true,
+  })
+  await expect(motion).toHaveAttribute('aria-pressed', 'true')
+  await expect(motion).toBeDisabled()
+})
+
+When('I rotate and reset the graph camera with the keyboard', async ({ page }) => {
+  const graph = page.locator('.galaxy-canvas')
+  const camera = page.getByLabel('Knowledge graph', { exact: true })
+  const before = await graph.getAttribute('data-yaw')
+  expect(before).not.toBeNull()
+  await camera.focus()
+  await expect(camera).toBeFocused()
+  await camera.press('ArrowRight')
+  await expect(graph).not.toHaveAttribute('data-yaw', before ?? '')
+  await camera.press('Home')
+  await expect(graph).toHaveAttribute('data-yaw', before ?? '')
+})
+
+Then(
+  'the selected graph node offers to open {string}',
+  async ({ page }, title: string) => {
+    await expect(
+      page.getByRole('button', { name: `Open ${title}`, exact: true }),
+    ).toBeVisible()
+  },
+)
+
+When(
+  'I open the selected graph node {string} with the keyboard',
+  async ({ page }, title: string) => {
+    const open = page.getByRole('button', { name: `Open ${title}`, exact: true })
+    await open.focus()
+    await open.press('Enter')
+  },
+)
 
 When('I switch from the document to its graph', async ({ page }) => {
   await page.getByRole('link', { name: 'Graph', exact: true }).click()

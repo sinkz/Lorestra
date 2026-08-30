@@ -14,7 +14,7 @@
     "demo:webmcp": "pnpm --filter @lorestra/e2e --if-present run demo:webmcp",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "knip": "knip",
+    "knip": "node scripts/check-unused.mjs",
     "lint": "eslint .",
     "peers:check": "pnpm peers check",
     "prepare": "husky",

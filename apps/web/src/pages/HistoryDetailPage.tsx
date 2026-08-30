@@ -23,7 +23,9 @@ export function HistoryDetailPage() {
   const [params] = useSearchParams()
   const cursor = params.get('cursor') ?? undefined
   const history = useHistoryQuery(undefined, cursor)
-  const historyHref = cursor ? `/history?cursor=${encodeURIComponent(cursor)}` : '/history'
+  const historyHref = cursor
+    ? `/history?cursor=${encodeURIComponent(cursor)}`
+    : '/history'
   const navigation = useNavigationQuery()
   const event = useMemo(
     () => history.data?.events.find((item) => item.id === eventId),

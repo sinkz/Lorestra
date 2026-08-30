@@ -124,72 +124,78 @@ export function FolderTree({
     else setActiveIndex((current) => Math.min(current, entries.length - 1))
   }, [entries.length, selectedIndex])
 
-  const focusRow = useCallback((index: number) => {
-    if (!entries.length) return
-    const nextIndex = Math.max(0, Math.min(index, entries.length - 1))
-    setActiveIndex(nextIndex)
-    if (entries.length > 80) virtualizer.scrollToIndex(nextIndex, { align: 'auto' })
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => rowRefs.current[nextIndex]?.focus()),
-    )
-  }, [entries.length, virtualizer])
+  const focusRow = useCallback(
+    (index: number) => {
+      if (!entries.length) return
+      const nextIndex = Math.max(0, Math.min(index, entries.length - 1))
+      setActiveIndex(nextIndex)
+      if (entries.length > 80) virtualizer.scrollToIndex(nextIndex, { align: 'auto' })
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => rowRefs.current[nextIndex]?.focus()),
+      )
+    },
+    [entries.length, virtualizer],
+  )
 
-  const onTreeKeyDown = useCallback((event: KeyboardEvent<HTMLElement>, index: number) => {
-    const entry = entries[index]
-    if (!entry) return
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      focusRow(index + 1)
-      return
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      focusRow(index - 1)
-      return
-    }
-    if (event.key === 'Home') {
-      event.preventDefault()
-      focusRow(0)
-      return
-    }
-    if (event.key === 'End') {
-      event.preventDefault()
-      focusRow(entries.length - 1)
-      return
-    }
-    const open = entry.kind === 'folder' && (expandedFolders[entry.id] ?? true)
-    if (event.key === 'ArrowRight' && entry.kind === 'folder') {
-      event.preventDefault()
-      if (!open) toggleFolder(entry.id)
-      else if (entries[index + 1]?.depth > entry.depth) focusRow(index + 1)
-      return
-    }
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault()
-      if (entry.kind === 'folder' && open) {
-        toggleFolder(entry.id)
+  const onTreeKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLElement>, index: number) => {
+      const entry = entries[index]
+      if (!entry) return
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        focusRow(index + 1)
         return
       }
-      for (let parentIndex = index - 1; parentIndex >= 0; parentIndex -= 1) {
-        if (
-          entries[parentIndex].kind === 'folder' &&
-          entries[parentIndex].depth === entry.depth - 1
-        ) {
-          focusRow(parentIndex)
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        focusRow(index - 1)
+        return
+      }
+      if (event.key === 'Home') {
+        event.preventDefault()
+        focusRow(0)
+        return
+      }
+      if (event.key === 'End') {
+        event.preventDefault()
+        focusRow(entries.length - 1)
+        return
+      }
+      const open = entry.kind === 'folder' && (expandedFolders[entry.id] ?? true)
+      if (event.key === 'ArrowRight' && entry.kind === 'folder') {
+        event.preventDefault()
+        if (!open) toggleFolder(entry.id)
+        else if (entries[index + 1]?.depth > entry.depth) focusRow(index + 1)
+        return
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        if (entry.kind === 'folder' && open) {
+          toggleFolder(entry.id)
           return
         }
+        for (let parentIndex = index - 1; parentIndex >= 0; parentIndex -= 1) {
+          if (
+            entries[parentIndex].kind === 'folder' &&
+            entries[parentIndex].depth === entry.depth - 1
+          ) {
+            focusRow(parentIndex)
+            return
+          }
+        }
+        return
       }
-      return
-    }
-    if (event.key === 'Enter' || event.key === ' ') {
-      if (entry.kind === 'folder') {
-        event.preventDefault()
-        rowRefs.current[index]
-          ?.querySelector<HTMLAnchorElement>('.tree-folder-link')
-          ?.click()
+      if (event.key === 'Enter' || event.key === ' ') {
+        if (entry.kind === 'folder') {
+          event.preventDefault()
+          rowRefs.current[index]
+            ?.querySelector<HTMLAnchorElement>('.tree-folder-link')
+            ?.click()
+        }
       }
-    }
-  }, [entries, expandedFolders, focusRow, toggleFolder])
+    },
+    [entries, expandedFolders, focusRow, toggleFolder],
+  )
 
   const registerRow = useCallback((index: number, node: HTMLElement | null) => {
     rowRefs.current[index] = node

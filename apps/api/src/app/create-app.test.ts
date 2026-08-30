@@ -113,9 +113,7 @@ describe('Lorestra API', () => {
     expect(history.status).toBe(200)
     const body = HistoryResponseSchema.parse(await history.json())
     expect(body.items.length).toBeLessThanOrEqual(2)
-    expect(body.items.every((event) => event.type === 'document_published')).toBe(
-      true,
-    )
+    expect(body.items.every((event) => event.type === 'document_published')).toBe(true)
 
     const noMatch = await app.request(
       'http://localhost/history?locale=en&q=no-event-can-match',

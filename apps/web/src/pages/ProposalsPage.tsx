@@ -49,8 +49,7 @@ export function ProposalsPage() {
   }
 
   if (proposals.isLoading) return <LoadingState />
-  if (proposals.isError)
-    return <ErrorState onRetry={() => void proposals.refetch()} />
+  if (proposals.isError) return <ErrorState onRetry={() => void proposals.refetch()} />
 
   return (
     <section className="page-surface" aria-labelledby="page-heading">
@@ -94,8 +93,7 @@ export function ProposalsPage() {
           <span className="muted-paper">
             {t('proposals.awaiting', {
               count: visible.filter(
-                (item) =>
-                  item.status === 'open' || item.status === 'changes-requested',
+                (item) => item.status === 'open' || item.status === 'changes-requested',
               ).length,
             })}
           </span>

@@ -1,0 +1,255 @@
+.atlas:has(.galaxy-canvas),
+.atlas:has(.galaxy-empty) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.atlas:has(.galaxy-canvas) .atlas-head {
+  flex-wrap: wrap;
+}
+.galaxy-canvas {
+  position: relative;
+  flex: 1 0 440px;
+  min-height: 440px;
+  margin: 24px 25px 18px;
+  overflow: hidden;
+  border: 1px solid #294239;
+  border-radius: 18px;
+  background: #071411;
+  isolation: isolate;
+}
+.galaxy-camera {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+.galaxy-camera:active {
+  cursor: grabbing;
+}
+.galaxy-camera:focus-visible {
+  outline: 2px solid #d3f56a;
+  outline-offset: -5px;
+}
+.galaxy-summary {
+  position: absolute;
+  inset: 18px auto auto 20px;
+  z-index: 2000;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: #b9cec4;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  pointer-events: none;
+}
+.celestial-node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #deebe3;
+  touch-action: none;
+  cursor: pointer;
+}
+.celestial-node:focus-visible {
+  outline: 2px solid #e4f6b2;
+  outline-offset: 5px;
+}
+.celestial-label {
+  position: absolute;
+  top: var(--label-offset, calc(100% + 6px));
+  left: 50%;
+  max-width: 152px;
+  width: max-content;
+  overflow: hidden;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.3;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow:
+    0 1px 5px #06100e,
+    0 0 10px #06100e;
+  pointer-events: none;
+}
+.celestial-label small {
+  display: block;
+  margin-top: 4px;
+  color: #9baa80;
+  font-size: 8px;
+  font-family: var(--mono);
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.celestial-node[data-hub='true'] .celestial-label {
+  color: #f0f0d8;
+  font-size: 12px;
+}
+.celestial-node[data-dimmed='true'] .celestial-label {
+  opacity: 0.25;
+}
+.celestial-node[data-label-visible='false'] .celestial-label {
+  opacity: 0;
+}
+.celestial-node:hover .celestial-label,
+.celestial-node:focus-visible .celestial-label {
+  opacity: 1;
+}
+.galaxy-selection {
+  position: absolute;
+  top: 48px;
+  right: 16px;
+  z-index: 2100;
+  display: grid;
+  gap: 10px;
+  max-width: min(264px, calc(100% - 32px));
+  padding: 16px;
+  border: 1px solid #52624c;
+  border-radius: 12px;
+  background: rgba(12, 29, 24, 0.96);
+  box-shadow: 0 12px 32px #0005;
+}
+.galaxy-selection strong {
+  overflow-wrap: anywhere;
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 500;
+  color: #f0f0d8;
+}
+.galaxy-selection .eyebrow,
+.galaxy-selection small {
+  color: #adc8b9;
+  font-size: 9px;
+}
+.galaxy-selection > div {
+  display: flex;
+  gap: 8px;
+}
+.galaxy-selection button {
+  min-height: 36px;
+  padding: 5px 14px;
+  border: 1px solid #91a370;
+  border-radius: 7px;
+  background: #d3f56a;
+  color: #112417;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+.galaxy-selection button:last-child {
+  background: transparent;
+  color: #e6eedc;
+}
+.galaxy-toolbar {
+  position: absolute;
+  z-index: 2000;
+  bottom: 40px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(100% - 20px);
+  padding: 4px;
+  transform: translateX(-50%);
+  border: 1px solid #3a5144;
+  border-radius: 10px;
+  background: rgba(14, 31, 25, 0.96);
+}
+.galaxy-toolbar button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  min-width: 28px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #d6e5c6;
+  font-size: 20px;
+  cursor: pointer;
+}
+.galaxy-toolbar button:hover,
+.galaxy-toolbar button[aria-pressed='true'] {
+  background: #334831;
+  color: #e0f79f;
+}
+.galaxy-toolbar button:disabled {
+  background: #25372e;
+  color: #9daf9d;
+  cursor: not-allowed;
+}
+.galaxy-toolbar button:focus-visible,
+.galaxy-selection button:focus-visible {
+  outline: 2px solid #e4f6b2;
+  outline-offset: 2px;
+}
+.galaxy-toolbar > span {
+  width: 1px;
+  height: 18px;
+  background: #3a5144;
+  margin: 0 3px;
+}
+.galaxy-help {
+  position: absolute;
+  z-index: 2000;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  margin: 0;
+  color: #a8c1b2;
+  font-size: 10px;
+  text-align: center;
+  pointer-events: none;
+}
+.galaxy-fallback,
+.galaxy-empty {
+  margin: 90px 30px;
+  color: #dbe9dc;
+}
+.atlas:has(.galaxy-canvas) .atlas-foot,
+.atlas:has(.galaxy-empty) .atlas-foot {
+  position: relative;
+  inset: auto;
+  margin: 0 25px 24px;
+}
+@media (max-width: 700px) {
+  .galaxy-canvas {
+    margin: 18px 12px;
+    flex-basis: 510px;
+    min-height: 510px;
+  }
+  .galaxy-summary {
+    top: 15px;
+    left: 14px;
+    gap: 8px;
+    font-size: 9px;
+  }
+  .galaxy-toolbar button {
+    width: 28px;
+    height: 38px;
+  }
+  .galaxy-help {
+    font-size: 9px;
+  }
+  .galaxy-selection {
+    max-width: 220px;
+    padding: 12px;
+  }
+  .atlas:has(.galaxy-canvas) .atlas-foot {
+    margin-inline: 12px;
+  }
+}

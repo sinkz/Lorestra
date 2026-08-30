@@ -395,10 +395,9 @@ export function createKnowledgeAdapter(client: KnowledgeClient): AppKnowledgeCli
         getNavigation(locale),
       ])
       const folders = new Map(
-        navigation.folders.flatMap(function collect(folder): Array<[
-          string,
-          NavigationItem,
-        ]> {
+        navigation.folders.flatMap(function collect(folder): Array<
+          [string, NavigationItem]
+        > {
           const item: NavigationItem = {
             id: folder.id,
             parentId: folder.parentId ?? null,
@@ -410,10 +409,7 @@ export function createKnowledgeAdapter(client: KnowledgeClient): AppKnowledgeCli
             order: 0,
             hasChildren: folder.children.length > 0 || folder.documentCount > 0,
           }
-          return [
-            [folder.id, item],
-            ...folder.children.flatMap(collect),
-          ]
+          return [[folder.id, item], ...folder.children.flatMap(collect)]
         }),
       )
       return {

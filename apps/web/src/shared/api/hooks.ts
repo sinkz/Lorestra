@@ -1,11 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useAppClients } from './client'
 import { useShellStore } from '../store/useShellStore'
-import type {
-  DocumentKind,
-  DocumentStatus,
-  HistoryEventType,
-} from '../model/types'
+import type { DocumentKind, DocumentStatus, HistoryEventType } from '../model/types'
 
 export const queryKeys = {
   navigation: (locale: string) => ['navigation', locale] as const,
@@ -33,7 +29,15 @@ export const queryKeys = {
     cursor?: string,
     query?: string,
     type?: string,
-  ) => ['history', documentId, locale, cursor ?? 'first', query ?? '', type ?? 'all'] as const,
+  ) =>
+    [
+      'history',
+      documentId,
+      locale,
+      cursor ?? 'first',
+      query ?? '',
+      type ?? 'all',
+    ] as const,
   proposals: (status: string, locale: string, cursor?: string) =>
     ['proposals', status, locale, cursor ?? 'first'] as const,
   proposal: (id: string, locale: string) => ['proposal', id, locale] as const,

@@ -638,11 +638,11 @@ const toProposal = (proposal: FixtureProposal): Proposal =>
     status: toProposalStatus(proposal.status),
     author: author(proposal.author),
     createdAt: proposal.createdAt,
-  updatedAt: proposal.updatedAt,
-  changeCount: proposal.files.length,
-  createsDocument:
-    proposal.kind === 'create' ||
-    proposal.files.some((file) => file.changeType === 'added'),
+    updatedAt: proposal.updatedAt,
+    changeCount: proposal.files.length,
+    createsDocument:
+      proposal.kind === 'create' ||
+      proposal.files.some((file) => file.changeType === 'added'),
     changes: proposal.files.map((file) => proposalChange(proposal, file)),
     checks: proposal.checks.map((check) => ({
       name: check.name,
@@ -738,9 +738,7 @@ export class MockKnowledgeClient implements KnowledgeClient {
               document.excerpt,
               document.folderPath.join('/'),
               ...document.tags,
-            ].some((value) =>
-              value.toLocaleLowerCase(request.locale).includes(query),
-            )),
+            ].some((value) => value.toLocaleLowerCase(request.locale).includes(query))),
       )
       .sort((left, right) =>
         request.sort === 'title'

@@ -68,9 +68,7 @@ export function HistoryPage() {
   )
   const proposalTitles = useMemo(
     () =>
-      new Map(
-        (proposals.data?.items ?? []).map((proposal) => [proposal.id, proposal]),
-      ),
+      new Map((proposals.data?.items ?? []).map((proposal) => [proposal.id, proposal])),
     [proposals.data],
   )
 

@@ -6,10 +6,28 @@ Feature: Lorestra knowledge workflow
     Then the heading "The living map" is visible
     And the knowledge graph has visible nodes
     And the knowledge graph is spread across both axes
+    And the knowledge graph exposes separate galaxies
     When I open the graph node "What is Lorestra?"
     Then the heading "What is Lorestra?" is visible
     When I switch from the document to its graph
     Then the URL contains "scope=related"
+
+  Scenario: Navigate the celestial graph with camera controls and a keyboard
+    Given I open Lorestra at "/atlas?scope=entire"
+    Then the knowledge graph has visible nodes
+    When I rotate, tilt, and zoom the constellation and reset its view
+    And I select the graph node "What is Lorestra?" with the keyboard
+    Then the selected graph node offers to open "What is Lorestra?"
+    When I open the selected graph node "What is Lorestra?" with the keyboard
+    Then the heading "What is Lorestra?" is visible
+
+  Scenario: Respect reduced motion while keeping the camera keyboard accessible
+    Given I prefer reduced motion
+    And I open Lorestra at "/atlas?scope=entire"
+    Then the knowledge graph has visible nodes
+    And automatic graph motion is paused
+    When I rotate and reset the graph camera with the keyboard
+    Then automatic graph motion is paused
 
   Scenario: Clear stale library state and create a proposal
     Given I open Lorestra at "/library?q=no-document-can-match"
@@ -75,6 +93,14 @@ Feature: Lorestra knowledge workflow
     When I choose the language "Português (Brasil)"
     Then the heading "Aprenda Lorestra" is visible
     And the URL contains "/docs/pt-BR"
+
+  @mobile
+  Scenario: Explore the celestial graph without mobile overflow
+    Given I open Lorestra at "/atlas?scope=entire"
+    Then the knowledge graph has visible nodes
+    And the page has no horizontal overflow
+    When I rotate, tilt, and zoom the constellation and reset its view
+    Then the page has no horizontal overflow
 
   @mobile
   Scenario: Collapse directories on a small screen

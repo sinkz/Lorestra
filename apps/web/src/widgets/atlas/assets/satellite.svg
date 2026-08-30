@@ -1,0 +1,167 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="256"
+  height="176"
+  viewBox="0 0 256 176"
+  fill="none"
+>
+  <title>Lorestra orbital knowledge relay</title>
+  <defs>
+    <linearGradient
+      id="panel"
+      x1="25"
+      y1="56"
+      x2="79"
+      y2="119"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#559CC5" />
+      <stop offset=".25" stop-color="#2D668D" />
+      <stop offset="1" stop-color="#112E4E" />
+    </linearGradient>
+    <linearGradient
+      id="metal"
+      x1="108"
+      y1="61"
+      x2="147"
+      y2="128"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#DCE8DF" />
+      <stop offset=".42" stop-color="#98B4BC" />
+      <stop offset="1" stop-color="#557380" />
+    </linearGradient>
+    <linearGradient
+      id="gold"
+      x1="105"
+      y1="79"
+      x2="124"
+      y2="121"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#ECDAA7" />
+      <stop offset=".5" stop-color="#BAA06D" />
+      <stop offset="1" stop-color="#807152" />
+    </linearGradient>
+    <linearGradient
+      id="dish"
+      x1="115"
+      y1="30"
+      x2="139"
+      y2="48"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#F1F7E9" />
+      <stop offset="1" stop-color="#6F9AAE" />
+    </linearGradient>
+    <pattern
+      id="cells"
+      x="0"
+      y="0"
+      width="12"
+      height="12"
+      patternUnits="userSpaceOnUse"
+    >
+      <path
+        d="M.6 0V12M0 .6H12"
+        stroke="#8DCAE6"
+        stroke-opacity=".55"
+        stroke-width=".65"
+      />
+      <path d="M3 3H9V9H3z" stroke="#82B8D3" stroke-opacity=".22" stroke-width=".45" />
+    </pattern>
+  </defs>
+  <!-- Mechanical truss and independent panel drives. -->
+  <path d="M73 86H183" stroke="#45616F" stroke-width="9" />
+  <path d="M73 83H183" stroke="#B8D3D8" stroke-width="2" />
+  <path d="M87 79V93M169 79V93" stroke="#D2C89E" stroke-width="5" />
+  <!-- Left solar wing, beveled frame, 4 × 5 cell grid. -->
+  <path d="M13 55L78 59V116L13 122Z" fill="#0C2436" stroke="#7BABB9" stroke-width="2" />
+  <path d="M17 59L74 62V113L17 118Z" fill="url(#panel)" />
+  <path d="M17 59L74 62V113L17 118Z" fill="url(#cells)" />
+  <path d="M16 58L75 61M16 119L75 114" stroke="#C0E2E9" stroke-opacity=".7" />
+  <path d="M42 61V116" stroke="#071D31" stroke-width="3" />
+  <path d="M42 61V116" stroke="#8CB7C9" stroke-width=".7" />
+  <!-- Right wing is perspective-matched, not a mirrored flat rectangle. -->
+  <path
+    d="M179 60L243 51V114L179 117Z"
+    fill="#0C2436"
+    stroke="#7BABB9"
+    stroke-width="2"
+  />
+  <path d="M183 63L239 55V110L183 113Z" fill="url(#panel)" />
+  <path d="M183 63L239 55V110L183 113Z" fill="url(#cells)" />
+  <path d="M182 62L240 54M182 114L240 111" stroke="#C0E2E9" stroke-opacity=".65" />
+  <path d="M210 59V112" stroke="#071D31" stroke-width="3" />
+  <path d="M210 59V112" stroke="#8CB7C9" stroke-width=".7" />
+  <!-- Main three-face bus and thermal-blanket facets. -->
+  <path
+    d="M104 70L133 55L156 71L153 120L124 138L102 120Z"
+    fill="url(#metal)"
+    stroke="#C1D7D9"
+    stroke-width="1.4"
+    stroke-linejoin="round"
+  />
+  <path d="M104 70L128 85L156 71L133 55Z" fill="#D3DED2" />
+  <path d="M128 85L156 71L153 120L124 138Z" fill="#344E61" />
+  <path d="M107 76L122 86L119 126L106 116Z" fill="url(#gold)" />
+  <path
+    d="M107 76L119 94L106 116M122 86L108 104L119 126"
+    stroke="#E2D3A3"
+    stroke-opacity=".55"
+    stroke-width=".8"
+  />
+  <path
+    d="M128 86L155 72M128 86L125 135M105 70L127 84"
+    stroke="#E8F0DE"
+    stroke-opacity=".8"
+  />
+  <!-- Recessed radiator with a readable rib rhythm at small size. -->
+  <path d="M134 89L148 82L147 111L132 120Z" fill="#1B3449" stroke="#7094A6" />
+  <path
+    d="M136 91L145 87M136 97L145 93M135 103L145 99M135 109L145 105"
+    stroke="#91B6C4"
+    stroke-width="1.3"
+  />
+  <path
+    d="M114 66L132 59L144 68L127 76Z"
+    fill="#8A9C91"
+    stroke="#EDF2D7"
+    stroke-width=".8"
+  />
+  <path d="M119 65L130 62L138 67L127 72Z" fill="#466675" />
+  <!-- High-gain dish, rear support, feed mast and antenna. -->
+  <path d="M129 61L126 43" stroke="#BECFCB" stroke-width="4" />
+  <path d="M118 39L132 49L144 34" stroke="#597C8B" stroke-width="2" />
+  <path
+    d="M109 32Q126 53 146 30Q129 39 109 32Z"
+    fill="url(#dish)"
+    stroke="#D7ECE8"
+    stroke-width="1.2"
+  />
+  <path
+    d="M110 32Q129 20 146 30Q132 38 110 32Z"
+    fill="#9ABAC2"
+    stroke="#E8F1E5"
+    stroke-width="1.2"
+  />
+  <path d="M115 31Q129 25 140 30" stroke="#F4FAEA" stroke-opacity=".65" />
+  <path
+    d="M129 32L133 16M128 31L119 27M130 31L140 26"
+    stroke="#CDDCD3"
+    stroke-width="1.2"
+    stroke-linecap="round"
+  />
+  <circle cx="133" cy="15" r="2" fill="#D3F56A" />
+  <!-- Science boom and telemetry beacons. -->
+  <path d="M151 78L165 58L169 42" stroke="#ADCAD0" stroke-width="1.5" />
+  <path d="M161 61L169 62M165 49L172 51" stroke="#789AAE" />
+  <circle cx="169" cy="41" r="2.3" fill="#83C8EC" />
+  <circle cx="112" cy="86" r="2.2" fill="#D3F56A" />
+  <circle cx="112" cy="94" r="1.6" fill="#E9B977" />
+  <path d="M122 136L121 146L129 145L132 133" fill="#233E4F" stroke="#96B3BC" />
+  <path d="M123 146L127 146" stroke="#C9E5E6" stroke-width="2" />
+  <circle cx="105" cy="73" r="1" fill="#F0F6E9" />
+  <circle cx="151" cy="74" r="1" fill="#F0F6E9" />
+  <circle cx="150" cy="117" r="1" fill="#A8C9D2" />
+</svg>

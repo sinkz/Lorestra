@@ -120,11 +120,18 @@ export function AtlasPage() {
       {mode === 'graph' ? (
         <Suspense fallback={<LoadingState />}>
           <GraphCanvas
+            key={`${scope}:${documentId ?? ''}:${folderId ?? ''}`}
             graph={graph.data}
             onOpen={(id) => {
               const document = navigation.data.documents.find((item) => item.id === id)
               if (document)
                 navigate(`/documents/${encodeURIComponent(document.slug)}?tab=preview`)
+              else if (
+                graph.data.nodes.some(
+                  (node) => node.id === id && node.kind === 'folder',
+                )
+              )
+                setParams({ scope: 'folder', folder: id })
             }}
           />
         </Suspense>

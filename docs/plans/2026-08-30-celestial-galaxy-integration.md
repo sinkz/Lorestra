@@ -31,8 +31,19 @@ No Cloudflare deployment, new backend contract, physical simulation, or external
 - Browser review: real Atlas in Portuguese; pointer drag changed yaw from 0.12 to 0.72; document selection highlighted its real neighborhood; no browser console errors.
 - Temporary harness: inspected 74-node and 200-node snapshots, including six communities, two disconnected memories, four real bridges, all body types, selected satellite detail, and zoom. Harness removed after inspection.
 - Independent review found and resolved empty-to-populated wheel attachment, label collisions, canceled-drag click suppression, focus restoration, reduced-motion UI synchronization, and idle per-frame DOM writes.
-- Textures are bounded to one 128/64px image per node (at most 12.5 MiB for 200 nodes), with a separately cached scene backdrop. Animation does not recompute layout or update React/DOM positions.
+- Initial integration bounded textures to one 128/64px image per node (at most 12.5 MiB for 200 nodes), with a separately cached scene backdrop. This froze body animation; the motion follow-up below replaces that backdrop strategy while preserving the texture bound and avoiding React updates per frame.
 - Production graph chunk: 27.50 kB / 9.61 kB gzip; satellite SVG: 5.34 kB / 1.77 kB gzip. React Flow and d3-force removed.
+
+## Follow-up — motion and toolbar help
+
+The first integration cached body drawing at time zero, losing visible motion from the approved single-HTML C experiment. Restore slow body drift, stellar pulse/corona, black-hole accretion, satellite rotation, pointer parallax, traveling relationship particles, and the rotating selected orbit with its probe.
+
+- Keep the procedural budget at 12 visible stars/black holes, prioritizing selection and hover, then nearer bodies. Cache other body textures. Cap continuous painting at 25 fps without rerendering React, regrouping communities, or rerunning label collision checks per frame.
+- Align semantic hit targets imperatively with the moving bodies. Use the satellite's rotational envelope for its clickable area, label offset, and collision avoidance.
+- Preserve the current animation phase across pause/resume and hidden tabs. Reduced motion disables continuous painting and pointer parallax.
+- Replace browser-native toolbar titles with localized, viewport-clamped tooltips: hover, keyboard focus, Escape dismissal, and an explanation for disabled motion controls. Render help outside the clipped graph boundary.
+
+Verification: `pnpm check` passed with 65 unit/integration tests; the final scene adjustments also passed focused lint, typecheck, all 38 web tests, and the production web build. Playwright/Gherkin covers 15 smoke scenarios, including actual Canvas-pixel and hit-position changes, frozen pause/reduced-motion snapshots, resume, and desktop/mobile tooltip bounds. Browser inspection verified the Portuguese tooltip, Escape dismissal, and selected orbit. The graph chunk is 32.05 kB / 11.25 kB gzip; no dependencies or backend contracts changed.
 
 ## Local tooling notes
 

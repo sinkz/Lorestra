@@ -1,7 +1,21 @@
-import { expect } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
 import { createBdd } from 'playwright-bdd'
 
 const { Given, When, Then } = createBdd()
+
+async function readCelestialFrame(page: Page) {
+  return page.locator('.galaxy-canvas').evaluate((graph) => {
+    const body = graph.querySelector('button.celestial-node[data-hub="false"]')
+    const canvas = graph.querySelector('canvas')
+    return {
+      position: body
+        ? `${body.getAttribute('data-screen-x')},${body.getAttribute('data-screen-y')}`
+        : null,
+      // Read only the rendered bitmap, excluding HUD/tooltip overlays.
+      bitmap: canvas instanceof HTMLCanvasElement ? canvas.toDataURL() : null,
+    }
+  })
+}
 
 Given('I open Lorestra at {string}', async ({ page }, path: string) => {
   await page.goto(path)
@@ -113,6 +127,94 @@ Then('automatic graph motion is paused', async ({ page }) => {
   await expect(motion).toHaveAttribute('aria-pressed', 'true')
   await expect(motion).toBeDisabled()
 })
+
+Then('celestial bodies visibly animate', async ({ page }) => {
+  await expect(page.locator('.galaxy-canvas')).toHaveAttribute('data-motion', 'active')
+  const before = await readCelestialFrame(page)
+  expect(before.position).not.toBeNull()
+  expect(before.bitmap).not.toBeNull()
+  await expect
+    .poll(async () => {
+      const current = await readCelestialFrame(page)
+      return {
+        positionChanged: current.position !== before.position,
+        pixelsChanged: current.bitmap !== before.bitmap,
+      }
+    })
+    .toEqual({ positionChanged: true, pixelsChanged: true })
+})
+
+When('I pause the celestial animation', async ({ page }) => {
+  await page.getByRole('button', { name: 'Pause motion', exact: true }).click()
+  await expect(page.locator('.galaxy-canvas')).toHaveAttribute('data-motion', 'paused')
+})
+
+Then('the celestial scene remains frozen', async ({ page }) => {
+  const frozen = await readCelestialFrame(page)
+  expect(frozen.position).not.toBeNull()
+  expect(frozen.bitmap).not.toBeNull()
+  const started = Date.now()
+  await expect
+    .poll(
+      async () => {
+        const current = await readCelestialFrame(page)
+        expect(current.position).toBe(frozen.position)
+        expect(current.bitmap === frozen.bitmap).toBe(true)
+        return Date.now() - started
+      },
+      { intervals: [50, 75, 100], timeout: 2_000 },
+    )
+    .toBeGreaterThanOrEqual(300)
+})
+
+When('I resume the celestial animation', async ({ page }) => {
+  await page.getByRole('button', { name: 'Resume motion', exact: true }).click()
+  await expect(page.locator('.galaxy-canvas')).toHaveAttribute('data-motion', 'active')
+})
+
+When('I hover the camera control {string}', async ({ page }, label: string) => {
+  await page.getByRole('button', { name: label, exact: true }).hover()
+})
+
+When('I focus the camera control {string}', async ({ page }, label: string) => {
+  await page.getByRole('button', { name: label, exact: true }).focus()
+})
+
+Then(
+  'the camera tooltip {string} is visible inside the viewport',
+  async ({ page }, label: string) => {
+    const tooltip = page.getByRole('tooltip')
+    await expect(tooltip).toHaveText(label)
+    await expect(tooltip).toBeVisible()
+    const box = await tooltip.boundingBox()
+    const viewport = page.viewportSize()
+    expect(box).not.toBeNull()
+    expect(viewport).not.toBeNull()
+    expect(box?.x ?? -1).toBeGreaterThanOrEqual(0)
+    expect(box?.y ?? -1).toBeGreaterThanOrEqual(0)
+    expect((box?.x ?? Infinity) + (box?.width ?? 0)).toBeLessThanOrEqual(
+      viewport?.width ?? 0,
+    )
+    expect((box?.y ?? Infinity) + (box?.height ?? 0)).toBeLessThanOrEqual(
+      viewport?.height ?? 0,
+    )
+  },
+)
+
+When('I dismiss the camera tooltip with Escape', async ({ page }) => {
+  await page.keyboard.press('Escape')
+})
+
+Then('the camera tooltip is hidden', async ({ page }) => {
+  await expect(page.getByRole('tooltip')).toBeHidden()
+})
+
+Then(
+  'the camera control {string} keeps keyboard focus',
+  async ({ page }, label: string) => {
+    await expect(page.getByRole('button', { name: label, exact: true })).toBeFocused()
+  },
+)
 
 When('I rotate and reset the graph camera with the keyboard', async ({ page }) => {
   const graph = page.locator('.galaxy-canvas')

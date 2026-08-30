@@ -181,6 +181,9 @@
   color: #d6e5c6;
   font-size: 20px;
   cursor: pointer;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out;
 }
 .galaxy-toolbar button:hover,
 .galaxy-toolbar button[aria-pressed='true'] {
@@ -191,17 +194,80 @@
   background: #25372e;
   color: #9daf9d;
   cursor: not-allowed;
+  pointer-events: none;
+}
+.galaxy-control {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border-radius: 6px;
+}
+.galaxy-control[aria-disabled='true'] {
+  cursor: not-allowed;
 }
 .galaxy-toolbar button:focus-visible,
+.galaxy-control:focus-visible,
 .galaxy-selection button:focus-visible {
   outline: 2px solid #e4f6b2;
   outline-offset: 2px;
 }
-.galaxy-toolbar > span {
+.galaxy-toolbar-separator {
   width: 1px;
   height: 18px;
   background: #3a5144;
   margin: 0 3px;
+}
+.galaxy-tooltip {
+  position: fixed;
+  z-index: 3000;
+  width: max-content;
+  max-width: min(256px, calc(100vw - 16px));
+  padding: 9px 12px;
+  border: 1px solid #627962;
+  border-radius: 8px;
+  background: #13291f;
+  color: #eef3dc;
+  box-shadow: 0 6px 24px #0005;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: center;
+  overflow-wrap: anywhere;
+  animation: galaxy-tooltip-in 120ms ease-out;
+}
+.galaxy-tooltip::after {
+  position: absolute;
+  left: var(--tooltip-arrow-x);
+  width: 7px;
+  height: 7px;
+  border-right: 1px solid #627962;
+  border-bottom: 1px solid #627962;
+  background: #13291f;
+  content: '';
+}
+.galaxy-tooltip[data-side='above']::after {
+  bottom: -4.5px;
+  transform: translateX(-50%) rotate(45deg);
+}
+.galaxy-tooltip[data-side='below']::after {
+  top: -4.5px;
+  transform: translateX(-50%) rotate(225deg);
+}
+@keyframes galaxy-tooltip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .galaxy-tooltip {
+    animation: none;
+  }
+  .galaxy-toolbar button {
+    transition: none;
+  }
 }
 .galaxy-help {
   position: absolute;

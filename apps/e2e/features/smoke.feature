@@ -28,6 +28,27 @@ Feature: Lorestra knowledge workflow
     And automatic graph motion is paused
     When I rotate and reset the graph camera with the keyboard
     Then automatic graph motion is paused
+    And the celestial scene remains frozen
+
+  Scenario: Animate celestial bodies and honor pause and resume
+    Given I open Lorestra at "/atlas?scope=entire"
+    Then the knowledge graph has visible nodes
+    And celestial bodies visibly animate
+    When I pause the celestial animation
+    Then the celestial scene remains frozen
+    When I resume the celestial animation
+    Then celestial bodies visibly animate
+
+  Scenario: Explain camera controls on hover and keyboard focus
+    Given I open Lorestra at "/atlas?scope=entire"
+    Then the knowledge graph has visible nodes
+    When I hover the camera control "Zoom in"
+    Then the camera tooltip "Zoom in" is visible inside the viewport
+    When I focus the camera control "Rotate right"
+    Then the camera tooltip "Rotate right" is visible inside the viewport
+    When I dismiss the camera tooltip with Escape
+    Then the camera tooltip is hidden
+    And the camera control "Rotate right" keeps keyboard focus
 
   Scenario: Clear stale library state and create a proposal
     Given I open Lorestra at "/library?q=no-document-can-match"
@@ -101,6 +122,10 @@ Feature: Lorestra knowledge workflow
     And the page has no horizontal overflow
     When I rotate, tilt, and zoom the constellation and reset its view
     Then the page has no horizontal overflow
+    When I focus the camera control "Zoom in"
+    Then the camera tooltip "Zoom in" is visible inside the viewport
+    When I dismiss the camera tooltip with Escape
+    Then the camera tooltip is hidden
 
   @mobile
   Scenario: Collapse directories on a small screen

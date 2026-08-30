@@ -2,6 +2,7 @@ import type { GraphSnapshot } from '../../shared/model/types'
 import { bodyColor, bodyKind, drawCelestialBody } from './celestialBodies'
 import { defaultCamera, moveCamera, projectPoint } from './galaxyCamera'
 import type { layoutGalaxies } from './galaxyLayout'
+import { bodyMotion, createMotionClock, liveBodyIds } from './galaxyMotion'
 
 type Layout = ReturnType<typeof layoutGalaxies>
 type Options = {
@@ -33,8 +34,8 @@ export function createGalaxyScene({
   let moving = true
   let selected: string | null = null
   let hovered: string | null = null
-  const backdrop = document.createElement('canvas')
-  const backdropContext = backdrop.getContext('2d')!
+  const clock = createMotionClock()
+  const pointer = { x: 0, y: 0, targetX: 0, targetY: 0 }
   let routes: {
     a: { x: number; y: number }
     b: { x: number; y: number }
@@ -119,27 +120,58 @@ export function createGalaxyScene({
     )
   }
 
-  function draw(time: number) {
+  function hitSize(id: string, radius: number) {
+    const satellite = bodyKind(nodeById.get(id)!) === 'satellite'
+    return Math.max(24, satellite ? radius * 4.5 : Math.min(110, radius * 2.4))
+  }
+
+  function bodyEnvelope(id: string, radius: number) {
+    // A rotating satellite's panel corners sweep beyond the central body's radius.
+    return radius * (bodyKind(nodeById.get(id)!) === 'satellite' ? 2.25 : 1)
+  }
+
+  function draw(time: number, updateLabels = true) {
     if (!ctx || destroyed) return
     const ratio = Math.min(window.devicePixelRatio || 1, 2)
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
     ctx.clearRect(0, 0, width, height)
     ctx.fillStyle = '#071411'
     ctx.fillRect(0, 0, width, height)
-    // Stable starfield: no random flickering or additional DOM nodes.
+    // Seeded drift and twinkle, matching the approved C experiment.
     for (let i = 1; i <= 100; i += 1) {
       ctx.fillStyle = i % 9 === 0 ? '#98b9b2' : '#36534b'
+      ctx.globalAlpha = 0.7 + Math.sin(time * 0.0009 + i) * 0.25
       ctx.beginPath()
       ctx.arc(
-        (i * 193.7) % width,
-        (i * 89.3) % height,
+        (((i * 193.7 + pointer.x * (i % 5) * 0.3) % width) + width) % width,
+        (i * 89.3 + time * (0.0008 + (i % 7) * 0.00025)) % height,
         i % 9 === 0 ? 1 : 0.55,
         0,
         Math.PI * 2,
       )
       ctx.fill()
     }
-    const projected = new Map(layout.nodes.map((node) => [node.id, project(node)]))
+    ctx.globalAlpha = 1
+    const poses = new Map(
+      layout.nodes.map((node, index) => [
+        node.id,
+        bodyMotion(bodyKind(nodeById.get(node.id)!), index, time),
+      ]),
+    )
+    const projected = new Map(
+      layout.nodes.map((node) => {
+        const point = project(node)
+        const pose = poses.get(node.id)!
+        return [
+          node.id,
+          {
+            ...point,
+            x: point.x + pose.x + pointer.x,
+            y: point.y + pose.y + pointer.y,
+          },
+        ]
+      }),
+    )
     routes = []
 
     for (const galaxy of layout.galaxies) {
@@ -190,7 +222,7 @@ export function createGalaxyScene({
         const p = projected.get(edge.source)!
         const q = projected.get(edge.target)!
         const active = selected === edge.source || selected === edge.target
-        if (active) routes.push({ a: p, b: q, mid })
+        if (active || !selected) routes.push({ a: p, b: q, mid })
         ctx.beginPath()
         ctx.moveTo(p.x, p.y)
         ctx.quadraticCurveTo(mid.x, mid.y, q.x, q.y)
@@ -204,7 +236,7 @@ export function createGalaxyScene({
           edge.relation === 'contains' || edge.relation === 'suggested' ? [3, 6] : [],
         )
         ctx.stroke()
-        if (active && !media.matches && moving) {
+        if (active) {
           ctx.strokeStyle = '#e2f4bd'
           ctx.setLineDash([3, 32])
           ctx.lineDashOffset = -time * 0.015
@@ -237,6 +269,9 @@ export function createGalaxyScene({
       const a = projected.get(source.id)!
       const b = projected.get(target.id)!
       const active = selected === source.id || selected === target.id
+      if (active || (!selected && edge.relation !== 'contains')) {
+        routes.push({ a, b, mid: { x: (a.x + b.x) / 2 + 10, y: (a.y + b.y) / 2 - 12 } })
+      }
       ctx.beginPath()
       ctx.moveTo(a.x, a.y)
       ctx.quadraticCurveTo((a.x + b.x) / 2 + 10, (a.y + b.y) / 2 - 12, b.x, b.y)
@@ -253,25 +288,41 @@ export function createGalaxyScene({
       ctx.setLineDash([])
     }
 
-    const occupied: { x: number; y: number; width: number }[] = []
+    const bodyGeometry = new Map(
+      layout.nodes.map((node) => {
+        const p = projected.get(node.id)!
+        const radius = screenRadius(node, p.scale)
+        return [
+          node.id,
+          {
+            id: node.id,
+            kind: bodyKind(nodeById.get(node.id)!),
+            radius,
+            depth: p.z,
+            visible:
+              p.x + radius * 3 > 0 &&
+              p.x - radius * 3 < width &&
+              p.y + radius * 3 > 0 &&
+              p.y - radius * 3 < height,
+          },
+        ]
+      }),
+    )
+    const liveIds = liveBodyIds([...bodyGeometry.values()], selected, hovered)
     const ordered = [...layout.nodes].sort(
       (a, b) => projected.get(b.id)!.z - projected.get(a.id)!.z,
     )
     for (const node of ordered) {
       const p = projected.get(node.id)!
-      const r = screenRadius(node, p.scale)
-      const visible =
-        p.x + r * 3 > 0 &&
-        p.x - r * 3 < width &&
-        p.y + r * 3 > 0 &&
-        p.y - r * 3 < height
+      const { radius: r, visible, kind } = bodyGeometry.get(node.id)!
       const target = targets.get(node.id)
       if (target) {
         target.style.display = visible ? '' : 'none'
         target.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -50%)`
-        target.style.width =
-          target.style.height = `${Math.max(24, Math.min(110, r * 2.4))}px`
-        target.style.zIndex = String(Math.round(1000 - p.z * 0.1))
+        if (updateLabels) {
+          target.style.width = target.style.height = `${hitSize(node.id, r)}px`
+          target.style.zIndex = String(Math.round(1000 - p.z * 0.1))
+        }
         target.dataset.screenX = String(p.x)
         target.dataset.screenY = String(p.y)
       }
@@ -282,15 +333,41 @@ export function createGalaxyScene({
         node.id !== selected &&
         !neighbors.get(selected)?.has(node.id)
       ctx.globalAlpha = dim ? 0.22 : 1
-      const { image, span } = texture(node.id, active || r > 7)
-      ctx.drawImage(
-        image,
-        p.x - (r * span) / 2,
-        p.y - (r * span) / 2,
-        r * span,
-        r * span,
-      )
-      if (active) {
+      const live = liveIds.has(node.id)
+      const pose = poses.get(node.id)!
+      ctx.save()
+      ctx.translate(p.x, p.y)
+      if (node.id === selected) {
+        ctx.save()
+        ctx.rotate(time * 0.00028 - 0.22)
+        ctx.strokeStyle = bodyColor(kind)
+        ctx.lineWidth = 1
+        ctx.setLineDash([4, 6])
+        ctx.beginPath()
+        ctx.ellipse(0, 0, r * 1.75, r * 1.12, 0, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.fillStyle = '#eef8f1'
+        ctx.fillRect(r * 1.75 - 3, -2, 6, 4)
+        ctx.fillStyle = '#d3f56a'
+        ctx.fillRect(r * 1.75 + 3, -1, 5, 2)
+        ctx.restore()
+      }
+      ctx.rotate(pose.tilt)
+      if (live) {
+        drawCelestialBody(ctx, {
+          kind,
+          radius: r,
+          seed: node.id,
+          time,
+          detailed: node.isHub || active || r > 12,
+        })
+      } else {
+        ctx.scale(pose.scale, pose.scale)
+        const { image, span } = texture(node.id, active || r > 7)
+        ctx.drawImage(image, -(r * span) / 2, -(r * span) / 2, r * span, r * span)
+      }
+      ctx.restore()
+      if (active && node.id !== selected) {
         ctx.beginPath()
         ctx.arc(p.x, p.y, r + 7, 0, Math.PI * 2)
         ctx.strokeStyle = bodyColor(bodyKind(nodeById.get(node.id)!))
@@ -299,6 +376,9 @@ export function createGalaxyScene({
       }
       ctx.globalAlpha = 1
     }
+    drawTravelers(time)
+    if (!updateLabels) return
+    const occupied: { x: number; y: number; width: number }[] = []
     // Label priority: selection, hubs, then nearby readable bodies. Hover always wins.
     const labelOrder = [...layout.nodes].sort(
       (a, b) =>
@@ -317,20 +397,22 @@ export function createGalaxyScene({
       const labelWidth = Math.min(152, nodeById.get(node.id)!.label.length * 6.5 + 12)
       const r = screenRadius(node, p.scale)
       const galaxy = galaxiesById.get(node.galaxyId)!
+      const labelRadius = Math.max(r * 1.2, bodyEnvelope(node.id, r))
       const offset =
         node.isHub && galaxy.nodeIds.length > 1
-          ? Math.max(r * 1.2 + 9, galaxy.radius * p.scale * 0.8 + 12)
-          : Math.max(12, r * 1.2) + 9
+          ? Math.max(labelRadius + 9, galaxy.radius * p.scale * 0.8 + 12)
+          : Math.max(12, labelRadius) + 9
       const y = p.y + offset
       target.style.setProperty(
         '--label-offset',
-        `${Math.max(24, Math.min(110, r * 2.4)) / 2 + offset}px`,
+        `${hitSize(node.id, r) / 2 + offset}px`,
       )
       const active = node.id === selected || node.id === hovered
       const collidesWithBody = layout.nodes.some((other) => {
         if (other.id === node.id) return false
         const otherPoint = projected.get(other.id)!
-        const otherRadius = screenRadius(other, otherPoint.scale) + 5
+        const otherRadius =
+          bodyEnvelope(other.id, screenRadius(other, otherPoint.scale)) + 5
         return (
           Math.abs(otherPoint.y - (y + 7)) < otherRadius + 7 &&
           Math.abs(otherPoint.x - p.x) < otherRadius + labelWidth / 2
@@ -353,57 +435,58 @@ export function createGalaxyScene({
     container.dataset.zoom = camera.zoom.toFixed(4)
   }
 
-  function animate(time: number) {
-    frame = 0
-    if (destroyed || document.hidden) return
-    if (time - lastPaint >= 40) {
-      // Restore a static layer; animation never recalculates layout or rewrites hit targets.
-      const ratio = Math.min(window.devicePixelRatio || 1, 2)
-      ctx!.setTransform(ratio, 0, 0, ratio, 0, 0)
-      ctx!.drawImage(backdrop, 0, 0, width, height)
-      const travelers = routes.slice(0, 30)
-      for (const [index, route] of travelers.entries()) {
-        const progress = (time * 0.00006 + index * 0.13) % 1
-        const back = 1 - progress
-        const x =
-          back * back * route.a.x +
-          2 * back * progress * route.mid.x +
-          progress * progress * route.b.x
-        const y =
-          back * back * route.a.y +
-          2 * back * progress * route.mid.y +
-          progress * progress * route.b.y
-        ctx!.fillStyle = '#cce9af'
-        ctx!.beginPath()
-        ctx!.arc(x, y, 1.6, 0, Math.PI * 2)
-        ctx!.fill()
-      }
-      // Sparse orbit dust supplies restrained life without moving selectable bodies.
-      for (const [index, galaxy] of layout.galaxies.slice(0, 16).entries()) {
-        if (galaxy.nodeIds.length < 2) continue
-        const p = project(galaxy)
-        const angle = time * 0.000025 + index * 1.7
-        const r = galaxy.radius * p.scale * 0.87
-        ctx!.fillStyle = 'rgba(161,206,182,0.45)'
-        ctx!.beginPath()
-        ctx!.arc(
-          p.x + Math.cos(angle) * r,
-          p.y + Math.sin(angle) * r * 0.72,
-          1,
-          0,
-          Math.PI * 2,
-        )
-        ctx!.fill()
-      }
-      lastPaint = time
+  function drawTravelers(time: number) {
+    const travelers = routes.slice(0, 30)
+    for (const [index, route] of travelers.entries()) {
+      const progress = (time * 0.00006 + index * 0.13) % 1
+      const back = 1 - progress
+      const x =
+        back * back * route.a.x +
+        2 * back * progress * route.mid.x +
+        progress * progress * route.b.x
+      const y =
+        back * back * route.a.y +
+        2 * back * progress * route.mid.y +
+        progress * progress * route.b.y
+      ctx!.fillStyle = '#cce9af'
+      ctx!.beginPath()
+      ctx!.arc(x, y, selected ? 2.2 : 1.6, 0, Math.PI * 2)
+      ctx!.fill()
     }
-    if (moving && !media.matches) frame = requestAnimationFrame(animate)
+    // Sparse orbit dust adds secondary motion between selectable bodies.
+    for (const [index, galaxy] of layout.galaxies.slice(0, 16).entries()) {
+      if (galaxy.nodeIds.length < 2) continue
+      const p = project(galaxy)
+      const angle = time * 0.000025 + index * 1.7
+      const r = galaxy.radius * p.scale * 0.87
+      ctx!.fillStyle = 'rgba(161,206,182,0.45)'
+      ctx!.beginPath()
+      ctx!.arc(
+        p.x + Math.cos(angle) * r * spread,
+        p.y + Math.sin(angle) * r * 0.72,
+        1,
+        0,
+        Math.PI * 2,
+      )
+      ctx!.fill()
+    }
+  }
+  function animate(now: number) {
+    frame = 0
+    if (destroyed || document.hidden || !moving || media.matches) return
+    const time = clock.tick(now)
+    if (now - lastPaint >= 40) {
+      pointer.x += (pointer.targetX - pointer.x) * 0.14
+      pointer.y += (pointer.targetY - pointer.y) * 0.14
+      // Only projection/transforms change: clustering and label collision work stay cached.
+      draw(time, false)
+      lastPaint = now
+    }
+    frame = requestAnimationFrame(animate)
   }
   function invalidate() {
-    if (destroyed) return
-    draw(0)
-    backdropContext.setTransform(1, 0, 0, 1, 0, 0)
-    backdropContext.drawImage(canvas, 0, 0)
+    if (destroyed || document.hidden) return
+    draw(clock.time)
     if (!frame && moving && !media.matches && !document.hidden)
       frame = requestAnimationFrame(animate)
   }
@@ -413,8 +496,6 @@ export function createGalaxyScene({
     const ratio = Math.min(window.devicePixelRatio || 1, 2)
     canvas.width = Math.round(width * ratio)
     canvas.height = Math.round(height * ratio)
-    backdrop.width = canvas.width
-    backdrop.height = canvas.height
     const neutral = defaultCamera()
     const rawX = Math.max(
       100,
@@ -448,12 +529,31 @@ export function createGalaxyScene({
   function activityChanged() {
     cancelAnimationFrame(frame)
     frame = 0
+    clock.suspend()
     if (!document.hidden) invalidate()
+  }
+  function pointAt(event: PointerEvent) {
+    if (
+      !moving ||
+      media.matches ||
+      event.buttons ||
+      (event.target as HTMLElement).closest('.galaxy-toolbar, .galaxy-selection')
+    )
+      return
+    const bounds = container.getBoundingClientRect()
+    pointer.targetX = ((event.clientX - bounds.left) / width - 0.5) * 10
+    pointer.targetY = ((event.clientY - bounds.top) / height - 0.5) * 8
+  }
+  function pointerLeft() {
+    if (!moving || media.matches) return
+    pointer.targetX = pointer.targetY = 0
   }
   const observer = new ResizeObserver(resize)
   observer.observe(container)
   document.addEventListener('visibilitychange', activityChanged)
   media.addEventListener('change', activityChanged)
+  container.addEventListener('pointermove', pointAt)
+  container.addEventListener('pointerleave', pointerLeft)
   resize()
 
   return {
@@ -487,9 +587,10 @@ export function createGalaxyScene({
       observer.disconnect()
       document.removeEventListener('visibilitychange', activityChanged)
       media.removeEventListener('change', activityChanged)
+      container.removeEventListener('pointermove', pointAt)
+      container.removeEventListener('pointerleave', pointerLeft)
       satellite.onload = null
       textures.clear()
-      backdrop.width = backdrop.height = 0
     },
   }
 }

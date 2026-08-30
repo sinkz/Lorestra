@@ -15,7 +15,11 @@ Semantic references have greater clustering weight than folder containment. Disc
 
 Camera transforms, drawing, and hit-target positions stay outside React's render loop. Cache body textures, cap pixel density, cull offscreen bodies, and pause continuous rendering when hidden or motion is disabled. Keep the bounded server graph contract (200 nodes / 500 edges); use scopes for larger vaults instead of silently dropping another slice in the renderer.
 
+Motion polish restores the approved experiment's body drift, stellar pulse, accretion motion, pointer parallax, and relationship travelers. Cap continuous painting at 25 frames per second and procedural star/black-hole drawing at 12 visible bodies; other bodies retain bounded textures. Hit-target transforms follow the painted bodies imperatively, while community layout and label-collision work stay outside the animation loop. A scene clock excludes paused/hidden time so resuming does not jump or restart the animation.
+
 Keep a list alternative, keyboard-operable nodes and camera controls, bilingual instructions, visible selection, and explicit reset. Redesign the station as an original same-origin satellite SVG, without external images or requests.
+
+Toolbar help uses a viewport-clamped portal so the graph's clipping boundary cannot hide it. The same localized label is available on hover and keyboard focus, can be dismissed with Escape, and explains the disabled motion control when reduced motion is requested.
 
 ## Alternatives
 

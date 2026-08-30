@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { GraphSnapshot } from '../../shared/model/types'
+import { CameraToolbar } from './CameraToolbar'
 import { layoutGalaxies } from './galaxyLayout'
 import { createGalaxyScene } from './galaxyScene'
 import './galaxy.css'
@@ -255,79 +256,62 @@ export function GraphCanvas({
           </div>
         </div>
       )}
-      <div
-        className="galaxy-toolbar"
-        role="group"
-        aria-label={t('atlas.cameraControls')}
-      >
-        <button
-          type="button"
-          aria-label={t('atlas.rotateLeft')}
-          title={t('atlas.rotateLeft')}
-          onClick={() => scene.current?.rotate(-0.16)}
-        >
-          ↶
-        </button>
-        <button
-          type="button"
-          aria-label={t('atlas.rotateRight')}
-          title={t('atlas.rotateRight')}
-          onClick={() => scene.current?.rotate(0.16)}
-        >
-          ↷
-        </button>
-        <button
-          type="button"
-          aria-label={t('atlas.tiltUp')}
-          title={t('atlas.tiltUp')}
-          onClick={() => scene.current?.rotate(0, -0.12)}
-        >
-          ↑
-        </button>
-        <button
-          type="button"
-          aria-label={t('atlas.tiltDown')}
-          title={t('atlas.tiltDown')}
-          onClick={() => scene.current?.rotate(0, 0.12)}
-        >
-          ↓
-        </button>
-        <span aria-hidden="true" />
-        <button
-          type="button"
-          aria-label={t('atlas.zoomOut')}
-          title={t('atlas.zoomOut')}
-          onClick={() => scene.current?.zoom(1 / 1.2)}
-        >
-          −
-        </button>
-        <button
-          type="button"
-          aria-label={t('atlas.zoomIn')}
-          title={t('atlas.zoomIn')}
-          onClick={() => scene.current?.zoom(1.2)}
-        >
-          +
-        </button>
-        <button
-          type="button"
-          aria-label={t('atlas.resetView')}
-          title={t('atlas.resetView')}
-          onClick={() => scene.current?.reset()}
-        >
-          ◎
-        </button>
-        <button
-          type="button"
-          aria-label={t(motionLabel)}
-          title={t(motionLabel)}
-          aria-pressed={motionPaused}
-          disabled={reducedMotion}
-          onClick={() => setPaused((current) => !current)}
-        >
-          {motionPaused ? '▷' : 'Ⅱ'}
-        </button>
-      </div>
+      <CameraToolbar
+        label={t('atlas.cameraControls')}
+        controls={[
+          {
+            id: 'rotate-left',
+            label: t('atlas.rotateLeft'),
+            icon: '↶',
+            onClick: () => scene.current?.rotate(-0.16),
+          },
+          {
+            id: 'rotate-right',
+            label: t('atlas.rotateRight'),
+            icon: '↷',
+            onClick: () => scene.current?.rotate(0.16),
+          },
+          {
+            id: 'tilt-up',
+            label: t('atlas.tiltUp'),
+            icon: '↑',
+            onClick: () => scene.current?.rotate(0, -0.12),
+          },
+          {
+            id: 'tilt-down',
+            label: t('atlas.tiltDown'),
+            icon: '↓',
+            onClick: () => scene.current?.rotate(0, 0.12),
+          },
+          {
+            id: 'zoom-out',
+            label: t('atlas.zoomOut'),
+            icon: '−',
+            onClick: () => scene.current?.zoom(1 / 1.2),
+            separatorBefore: true,
+          },
+          {
+            id: 'zoom-in',
+            label: t('atlas.zoomIn'),
+            icon: '+',
+            onClick: () => scene.current?.zoom(1.2),
+          },
+          {
+            id: 'reset',
+            label: t('atlas.resetView'),
+            icon: '◎',
+            onClick: () => scene.current?.reset(),
+          },
+          {
+            id: 'motion',
+            label: t(motionLabel),
+            icon: motionPaused ? '▷' : 'Ⅱ',
+            onClick: () => setPaused((current) => !current),
+            pressed: motionPaused,
+            disabled: reducedMotion,
+          },
+        ]}
+      />
       <p id="galaxy-help" className="galaxy-help">
         {t('atlas.cameraHint')}
       </p>

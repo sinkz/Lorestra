@@ -2,12 +2,11 @@ import {
   DurableCreateProposalInputSchema,
   DurableUpdateProposalInputSchema,
   DurableProposalTransitionInputSchema,
-  type MergeConfirmation,
 } from '@lorestra/contracts'
 import { ApiError } from '../../shared/api/errors'
 import type { AppClients, FolderNode, Locale } from '../../shared/model/types'
 
-import type { WebMcpToolDefinition, WebMcpToolResult } from './types'
+import type { WebMcpInteraction, WebMcpToolDefinition, WebMcpToolResult } from './types'
 
 const MAX_BODY_CHARS = 32_000
 const MAX_GRAPH_NODES = 200
@@ -285,11 +284,7 @@ function writeSchema(schema: Record<string, unknown>): Record<string, unknown> {
 export function createLorestraWebMcpTools(
   clients: AppClients,
   getLocale: () => Locale,
-  interaction?: {
-    confirmMerge: (
-      input: MergeConfirmation & { title: string },
-    ) => boolean | Promise<boolean>
-  },
+  interaction?: WebMcpInteraction,
 ): WebMcpToolDefinition[] {
   const readOnly = { readOnlyHint: true, untrustedContentHint: true }
   const guideSession = async (signal?: AbortSignal) => {
@@ -811,16 +806,11 @@ export function createLorestraWebMcpTools(
           const approved =
             current.status === 'merged' ||
             (interaction
-              ? await interaction.confirmMerge({
-                  ...confirmation,
-                  title: current.title,
-                })
-              : typeof window !== 'undefined' &&
-                window.confirm(
-                  getLocale() === 'pt-BR'
-                    ? `Publicar “${current.title}” (proposta v${current.proposalVersion})?\nID: ${current.id}\nSHA-256: ${current.contentHash}\nIsso atualiza o conteúdo publicado no Lorestra.`
-                    : `Merge “${current.title}” (proposal v${current.proposalVersion})?\nID: ${current.id}\nSHA-256: ${current.contentHash}\nThis publishes the reviewed content to Lorestra.`,
-                ))
+              ? await interaction.confirmMerge(
+                  Object.freeze({ ...confirmation, title: current.title }),
+                  { signal: options?.signal },
+                )
+              : false)
           if (!approved)
             throw new Error(
               'Human merge confirmation was declined. Nothing was published.',

@@ -14,6 +14,8 @@ export default tseslint.config(
       '**/.stryker-tmp/**',
       '**/reports/**',
       '**/.wrangler/**',
+      '**/.lorestra/**',
+      '**/artifacts/**',
       '**/node_modules/**',
       '**/worker-configuration.d.ts',
       '**/*.gen.ts',

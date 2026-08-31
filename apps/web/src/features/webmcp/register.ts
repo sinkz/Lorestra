@@ -1,7 +1,7 @@
 import type { AppClients, Locale } from '../../shared/model/types'
 
 import { createLorestraWebMcpTools } from './tools'
-import type { WebMcpDocument, WebMcpRegistration } from './types'
+import type { WebMcpDocument, WebMcpInteraction, WebMcpRegistration } from './types'
 const registrationOwners = new WeakMap<Document, symbol>()
 
 export async function registerLorestraWebMcpTools(
@@ -9,10 +9,21 @@ export async function registerLorestraWebMcpTools(
   clients: AppClients,
   getLocale: () => Locale,
   parentSignal?: AbortSignal,
+  interaction?: WebMcpInteraction,
 ): Promise<WebMcpRegistration> {
   const modelContext = (targetDocument as WebMcpDocument).modelContext
-  const tools = createLorestraWebMcpTools(clients, getLocale)
   const controller = new AbortController()
+  const tools = createLorestraWebMcpTools(clients, getLocale, interaction).map(
+    (definition) => ({
+      ...definition,
+      execute: (input: Record<string, unknown>, options?: { signal?: AbortSignal }) =>
+        definition.execute(input, {
+          signal: options?.signal
+            ? AbortSignal.any([controller.signal, options.signal])
+            : controller.signal,
+        }),
+    }),
+  )
   const owner = Symbol('registration')
   registrationOwners.set(targetDocument, owner)
   parentSignal?.addEventListener('abort', () => controller.abort(), { once: true })

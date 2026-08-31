@@ -17,6 +17,8 @@ import { SessionContext, sessionScope } from '../shared/api/session'
 import { ApiError } from '../shared/api/errors'
 import { ErrorState, LoadingState } from '../shared/ui'
 import { registerLorestraWebMcpTools } from '../features/webmcp/register'
+import { createMergeConfirmationController } from '../features/webmcp/confirmation'
+import { WebMcpConfirmationDialog } from '../features/webmcp/WebMcpConfirmationDialog'
 import { useShellStore } from '../shared/store/useShellStore'
 
 const sessionQueries = new QueryClient({
@@ -114,6 +116,7 @@ function WorkspaceSession({
   const [coordinated] = useState(() =>
     coordinateClients(clients, queryClient, () => sessionRef.current, refresh),
   )
+  const [mergeConfirmation] = useState(createMergeConfirmationController)
   useEffect(() => {
     const controller = new AbortController()
     const registration = registerLorestraWebMcpTools(
@@ -121,6 +124,7 @@ function WorkspaceSession({
       coordinated,
       () => useShellStore.getState().locale,
       controller.signal,
+      mergeConfirmation,
     )
     return () => {
       controller.abort()
@@ -128,7 +132,7 @@ function WorkspaceSession({
       void queryClient.cancelQueries()
       queryClient.clear()
     }
-  }, [coordinated, queryClient])
+  }, [coordinated, queryClient, mergeConfirmation])
   const logout = async () => {
     await clients.session!.logout({
       idempotencyKey: crypto.randomUUID(),
@@ -161,6 +165,7 @@ function WorkspaceSession({
       <QueryClientProvider client={queryClient}>
         <ClientProvider clients={coordinated}>
           <RouterProvider router={router} />
+          <WebMcpConfirmationDialog controller={mergeConfirmation} />
         </ClientProvider>
       </QueryClientProvider>
     </SessionContext.Provider>

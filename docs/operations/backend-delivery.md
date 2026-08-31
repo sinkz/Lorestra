@@ -22,19 +22,19 @@ The approved celestial renderer, camera gestures, motion, palette and layout wer
 
 See [the detailed acceptance map](backend-verification.md), [native evidence](native-webmcp-evidence.md), and [measured D1 scale work](../reports/backend-scale.md). Those records distinguish actual HTTP, storage, controlled-transport unit tests and mock visual regressions.
 
-The final `pnpm check` passed: formatting, ESLint, dependency boundaries, Knip, peer constraints, typechecking, **145 tests** and production builds. The complete HTTP BDD suite was then rerun against that code and passed **14/14**, zero retries, in 2.1 minutes.
+The latest `pnpm check`, including the asynchronous native confirmation follow-up, passed: formatting, ESLint, dependency boundaries, Knip, peer constraints, typechecking, **152 tests** and production builds. The complete HTTP BDD suite was then rerun against that code and passed **14/14**, zero retries, in 2.1 minutes.
 
-| Gate                       | Current recorded result                                                                        |
-| -------------------------- | ---------------------------------------------------------------------------------------------- |
-| API integration/unit       | 49 passing tests across 6 files, including the final alias/import and failed-check regressions |
-| Contract and mock packages | 13 + 13 passing tests; mock results are not durable-storage evidence                           |
-| Web unit/integration       | 63 passing tests in the final consolidated run                                                 |
-| Operator tooling           | 7 passing tests, including UTF-8/emoji/CRLF export/reimport and full backup recovery           |
-| Visual/mock BDD            | 19/19, zero retries; camera/motion/overflow thresholds retained                                |
-| HTTP BDD                   | 14/14 in the final-code rerun, zero retries                                                    |
-| Full quality gate          | Passed on final code: 145 tests and both production builds                                     |
-| Native WebMCP              | Real guide/search/read calls passed; authenticated native lifecycle not certified              |
-| Remote CI / staging        | Not run; no push or deployment performed                                                       |
+| Gate                       | Current recorded result                                                                                          |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| API integration/unit       | 49 passing tests across 6 files, including the final alias/import and failed-check regressions                   |
+| Contract and mock packages | 13 + 13 passing tests; mock results are not durable-storage evidence                                             |
+| Web unit/integration       | 70 passing tests in the final consolidated run                                                                   |
+| Operator tooling           | 7 passing tests, including UTF-8/emoji/CRLF export/reimport and full backup recovery                             |
+| Visual/mock BDD            | 19/19, zero retries; camera/motion/overflow thresholds retained                                                  |
+| HTTP BDD                   | 14/14 in the final-code rerun, zero retries                                                                      |
+| Full quality gate          | Passed on final code: 152 tests and both production builds                                                       |
+| Native WebMCP              | Real authenticated author/review/publish exercised; transport timeout and exact-key recovery recorded separately |
+| Remote CI / staging        | Not run; no push or deployment performed                                                                         |
 
 The Workers test suite runs files serially to keep workerd memory bounded on Windows. An initial parallel runtime crash was not counted as a pass; the serial run completed. Tests do not require or access a Cloudflare account.
 
@@ -42,9 +42,9 @@ No new broad mutation suite was added: direct D1 transaction failures, R2 prepar
 
 ## Acceptance boundary — do not label the whole plan “100%” yet
 
-The local implementation is usable, but the original plan's full L sign-off is stricter than the implemented smoke suite. The acceptance matrix keeps remaining clauses visible, including the full native authenticated create/correct/merge flow, stale human confirmation across native sessions, and every specified HTTP responsive/graph/offline interaction. Equivalent unit/storage evidence is identified as such, not renamed an end-to-end browser pass.
+The local implementation is usable, but the original plan's full L sign-off is stricter than the implemented smoke suite. The acceptance matrix keeps remaining clauses visible, including every native cancellation/error response and every specified HTTP responsive/graph/offline interaction. Equivalent unit/storage evidence is identified as such, not renamed an end-to-end browser pass.
 
-Permission was requested before entering a synthetic local credential in the native browser. Until confirmed and exercised, native authenticated B29/B30/B34 remain pending. This does not change the separately verified HTTP authorization and publication behavior.
+The user authorized the synthetic local native sessions, and agents authored, corrected, requested changes, approved and published documents. The [native execution report](native-agents-demo.md) records successful publication, retained old revisions, denied contributor approval and no publication after stale confirmation. It also records the remaining CDP timeout while awaiting human input: identical-payload, same-key retries recovered the confirmed publication, but the original cancellation/conflict payloads were not captured. This is not a complete B29/B30/B34 sign-off and does not change the separately verified HTTP authorization behavior.
 
 S remains unstarted: a real identity provider, Cloudflare account/resources, origin, authorized members, remote backup destination/retention, staging and two-machine validation require explicit user decisions and deployment authority. Local development credentials must not be exposed publicly.
 

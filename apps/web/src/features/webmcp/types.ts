@@ -1,4 +1,15 @@
+import type { MergeConfirmation } from '@lorestra/contracts'
+
 type JsonSchema = Record<string, unknown>
+
+export type MergeConfirmationRequest = Readonly<MergeConfirmation & { title: string }>
+
+export interface WebMcpInteraction {
+  confirmMerge: (
+    input: MergeConfirmationRequest,
+    options?: { signal?: AbortSignal },
+  ) => boolean | Promise<boolean>
+}
 
 export interface WebMcpToolResult {
   content: Array<{ type: 'text'; text: string }>

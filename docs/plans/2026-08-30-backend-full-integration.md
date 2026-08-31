@@ -1,7 +1,7 @@
 # Lorestra — plano de integração completa com o backend
 
 - Data: 2026-08-30.
-- Status: **backend local implementado; aceite integral L ainda depende da evidência nativa autenticada e das cláusulas restantes da matriz de testes; S não iniciado**.
+- Status: **backend local implementado e fluxo nativo autenticado exercitado; aceite integral L ainda depende das exceções de transporte nativo e das cláusulas restantes da matriz de testes; S não iniciado**.
 - Baseline inspecionada: `8f3aa74` (`feat/celestial-galaxies`).
 - Entrega deste documento: escopo, decisões recomendadas, sequência de implementação, critérios de aceite e especificações E2E em Gherkin.
 - Nenhuma etapa abaixo autoriza provisionamento, deploy, credenciais, migração destrutiva ou abertura de escrita pública.
@@ -360,7 +360,7 @@ Cada etapa termina em commit/PR convencional, com evidência proporcional ao ris
 ### F6 — UI + WebMCP no mesmo caminho
 
 - [x] Composition HTTP, erros tipados, cancelamento e query invalidation compartilhada.
-- [x] Tool de update/resubmit, dados limitados com continuação, capabilities e confirmação explícita de merge implementadas; execução nativa autenticada ainda pendente.
+- [x] Tool de update/resubmit, dados limitados com continuação, capabilities e confirmação explícita de merge implementadas e exercitadas com sessão nativa autenticada; timeout no transporte durante confirmação e recuperação idempotente documentados no relatório próprio.
 - [x] Expiração/sessão trocada não deixa conteúdo de outro principal no cache.
 - [x] Preservar paleta, layout, teclado, foco, câmera, tooltips e reduced motion.
 - Saída: B19/B26–B30/B33–B35; merge do agente atualiza Library/Docs/History sem reload.
@@ -441,7 +441,7 @@ Seleção do smoke HTTP comum: `@http and @smoke and not @webmcp-real and not @s
 - [x] Reload, restart, retry e usuários concorrentes não perdem nem sobrescrevem conhecimento silenciosamente nos cenários exercitados.
 - [x] Política, isolamento de caches, limites, restauração e invariantes de segurança testados.
 - [x] Docs/galáxias, idiomas e layout preservados; o modo HTTP não simula sucesso.
-- [x] `pnpm check` (145 testes), HTTP BDD (14/14), mock visual (19/19) e integração storage aprovados; nenhuma falha P0/P1 identificada sem resolução nesse recorte.
+- [x] `pnpm check` (152 testes), HTTP BDD (14/14), mock visual (19/19) e integração storage aprovados; nenhuma falha P0/P1 identificada sem resolução nesse recorte automatizado. Exceções nativas permanecem explícitas.
 
 ### Marco S
 
@@ -454,7 +454,7 @@ Seleção do smoke HTTP comum: `@http and @smoke and not @webmcp-real and not @s
 
 ## 14. Decisões pendentes e controle de mudança
 
-D1+R2 e papéis foram aceitos com a autorização de implementação, registrados em ADR-0006/0007. Antes de F8, o usuário precisa fornecer/escolher conta, origem, provedor e membros autorizados; nunca inferir esses valores. O aceite nativo autenticado também continua dependente da confirmação solicitada para usar uma credencial local sintética no navegador.
+D1+R2 e papéis foram aceitos com a autorização de implementação, registrados em ADR-0006/0007. Antes de F8, o usuário precisa fornecer/escolher conta, origem, provedor e membros autorizados; nunca inferir esses valores. O usuário autorizou as sessões locais sintéticas, e o [ensaio multiagente nativo](../operations/native-agents-demo.md) foi executado. O aceite integral nativo ainda exige resolver/verificar as exceções de timeout e retorno de cancelamento/conflito descritas nesse registro; autorização local não autoriza deploy.
 
 Mudança para D1-only, acesso público a propostas abertas, convites de terceiros, sincronização offline ou deploy em conta real altera o escopo e exige decisão explícita. Diretórios, classes celestes e UI aprovados não serão redesenhados como consequência indireta de trocar o backend.
 

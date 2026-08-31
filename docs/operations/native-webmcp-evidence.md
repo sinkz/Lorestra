@@ -10,8 +10,12 @@ Date: 2026-08-31. Browser: Codex in-app browser, actual native WebMCP capability
 - `lorestra_read_document({slug:"demo-lyra-legacy",locale:"en"})` returned the archived document's real Markdown, revision/base version 1, metadata and relations from the HTTP backend.
 - A deliberate visual review confirmed the approved celestial Atlas, four displayed folder groups (Docs plus Orion/Lyra/Cygnus), 32 visible nodes and 110 relations in the Portuguese fixture. Camera controls, reduced-motion control and list alternative remain available. This screenshot check is not a performance benchmark.
 
+## Authenticated follow-up
+
+After the user authorized synthetic local sessions, actual native tools created and corrected a cookbook, denied contributor approval with `403 forbidden`, approved reviewed content and opened the visible human merge confirmation. The cookbook and a separate runbook correction were published; historical runbook v1 remained readable alongside v2. Independent local HTTP agents also authored, requested changes and reviewed documentation. See [the multi-agent execution record](native-agents-demo.md) for IDs, exact transitions and screenshots.
+
+The test exposed blocking `window.confirm` behavior, replaced by an asynchronous accessible modal. Cancel/Escape and stale-confirmation readback showed no publication. However, the native transport still timed out while awaiting human input: original cancellation/conflict payloads were not captured. After explicit confirmation, identical-payload, same-key retries recovered the persisted successful results without duplicate publication. This limitation remains open; do not call the complete native B29–B30 gate passed.
+
 ## Not certified by this evidence
 
-Authenticated native creation/resubmission/approval/merge and its human confirmation have **not yet been executed in the native browser**. Permission to enter a synthetic local credential was requested separately; no user account or Cloudflare credential was accessed. Actual HTTP writes have their own passing BDD and Workers integration evidence; they must not be relabeled native-tool evidence.
-
-This provides partial B29 discovery/read evidence and archived-status evidence, not a passed B29–B30 end-to-end gate, the B34 authority scenario, or a completed shared deployment. The ordinary-browser fallback and tool unit tests are separate checks. When resuming the native write demonstration, use an isolated synthetic vault/session, confirm the exact proposal ID/version/hash, and record sanitized results only; never publish cookies, token files or authenticated traces.
+The malicious-document authority scenario, every native error/cancellation response, cross-machine collaboration and shared staging remain uncertified. The ordinary-browser fallback, HTTP BDD and controller/tool unit tests are separate checks. Only operator-issued synthetic sessions were used; no user account or Cloudflare credential was accessed. Never publish cookies, token files or authenticated traces.

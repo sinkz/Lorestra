@@ -27,3 +27,23 @@ Feature: Read the real persisted vault
     When I reload the persisted document
     Then Portuguese remains selected and both translation IDs are preserved
     And no successful read was supplied by the browser mock
+
+  @mobile
+  Scenario: B35 Keep the persisted Atlas usable on a narrow screen
+    Given I browse as a visitor
+    And the viewport is exactly 360 CSS pixels wide
+    When I open the entire persisted Atlas
+    Then Orion, Lyra and Cygnus are represented in the persisted graph
+    And the persisted Atlas has no horizontal overflow
+    When I zoom and pan the persisted Atlas
+    Then the persisted Atlas remains usable without mobile overflow
+
+  @pagination
+  Scenario: Keep opaque HTTP cursors honest across filters and browser back
+    Given a maintainer is browsing the Library
+    When I open the second Library page through HTTP
+    Then the Library shows an honest opaque-cursor range
+    When I filter the Library to an absent title
+    Then filtering resets pagination to the first HTTP page
+    When I navigate back to the second Library page
+    Then the second Library page and its cursor are restored

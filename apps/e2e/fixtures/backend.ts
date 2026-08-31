@@ -8,7 +8,7 @@ import type {
   DurableProposal,
   Principal,
 } from '@lorestra/contracts'
-import type { BrowserContext } from '@playwright/test'
+import type { BrowserContext, Page } from '@playwright/test'
 import type { Miniflare } from 'miniflare'
 import { test as base } from 'playwright-bdd'
 
@@ -41,6 +41,12 @@ export type WorkflowWorld = {
   proposals?: DurableProposal[]
   responses?: { status: number; body: unknown }[]
   mutationRequests?: number
+  offlineAttempts?: { method: string; idempotencyKey?: string }[]
+  proposalCountBefore?: number
+  incomingReferenceSourceId?: string
+  priorRevisionObjectKey?: string
+  libraryTotal?: number
+  auxiliaryPage?: Page
 }
 
 export const actors = {

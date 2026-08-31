@@ -69,7 +69,7 @@ The failed competitor was deliberately left available for inspection, without re
 
 The open UI in A still displayed proposal version 1 after B's write, while an explicit native read already returned version 2. A's own subsequent successful mutation refreshed its UI. Cross-tab external-change notifications or refresh affordances remain a UX improvement; this test does not claim instantaneous synchronization of every open screen.
 
-The native confirmation transport timeout remains unresolved. This experiment does not certify every native cancellation/conflict response, separate identities, independent sessions, different machines, a load benchmark, CRDT editing or shared staging. It does establish that two independent agents invoked actual WebMCP updates with overlapping execution, that one stale update was rejected, and that explicit reconciliation preserved both contributions.
+This historical experiment's native confirmation transport timeout is superseded by the bounded two-call release exercise recorded in the [local release evidence](local-release-evidence.md). This experiment itself does not certify every native cancellation/conflict response, separate identities, independent sessions, different machines, a load benchmark, CRDT editing or shared staging. It does establish that two independent agents invoked actual WebMCP updates with overlapping execution, that one stale update was rejected, and that explicit reconciliation preserved both contributions.
 
 No application code or contracts were changed for the experiment. The [manual Gherkin protocol](dual-webmcp-tabs.feature) is not an automated Playwright binding. Existing HTTP/storage tests remain separate evidence.
 

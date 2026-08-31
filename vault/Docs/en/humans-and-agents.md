@@ -22,7 +22,7 @@ nav:
 
 # Humans and multiple agents
 
-Lorestra treats humans and agents as peers in discovery but not as indistinguishable authorities. An agent may search, summarize, compare revisions, connect related documents, and prepare a proposal. A human reviewer decides whether the evidence and scope are good enough to publish, unless an explicit future policy grants an equivalent authenticated role.
+Lorestra treats humans and agents as peers in discovery but not as indistinguishable authorities. In the current durable local integration, an authenticated agent inherits the capabilities of its browser session: it may search, summarize, compare revisions, connect related documents, and prepare a proposal, but it gains no authority from document text or tool input. A human reviewer explicitly confirms a merge. Shared agent identity and deployment remain outside the current local scope.
 
 ## Make every handoff inspectable
 

@@ -1,14 +1,65 @@
+import { randomUUID } from 'node:crypto'
+
 import {
   DocumentResponseSchema,
   GraphResponseSchema,
+  type DurableCreateProposalInput,
   SessionResponseSchema,
 } from '@lorestra/contracts'
 import { expect } from '@playwright/test'
 import { createBdd } from 'playwright-bdd'
 
 import { test } from '../../fixtures/backend'
+import { createProposal, transitionProposal } from '../../fixtures/http-workflow'
 
 const { Given, When, Then } = createBdd(test)
+
+async function ensurePaginationFixture(backend: Parameters<typeof createProposal>[0]) {
+  const { DB } = await backend.bindings()
+  const current = await DB.prepare(
+    "SELECT COUNT(*) AS count FROM documents WHERE locale = 'en' AND deleted = 0",
+  ).first<{ count: number }>()
+  const needed = Math.max(0, 51 - (current?.count ?? 0))
+  if (!needed) return current?.count ?? 0
+  const changes: DurableCreateProposalInput['changes'] = Array.from(
+    { length: needed },
+    (_, index) => ({
+      id: randomUUID(),
+      target: {
+        documentId: null,
+        slug: `http-pagination-${index}`,
+        title: `HTTP pagination fixture ${index + 1}`,
+      },
+      changeType: 'added' as const,
+      baseVersion: null,
+      after: `# HTTP pagination fixture ${index + 1}\n\nThis fixture exists only to exercise opaque cursor navigation.\n`,
+      metadata: {
+        type: 'process' as const,
+        folderId: 'folder.demo.orion.en',
+        tags: ['e2e-pagination'],
+        relations: [],
+        visibility: 'public' as const,
+        status: 'published' as const,
+        locale: 'en' as const,
+      },
+    }),
+  )
+  const proposal = await createProposal(
+    backend,
+    {
+      title: 'Seed HTTP pagination fixtures',
+      summary: 'Exercise the durable opaque cursor in a bounded browser test',
+      changes,
+    },
+    'morgan',
+  )
+  const approved = await transitionProposal(backend, proposal, 'approved', 'morgan')
+  await transitionProposal(backend, approved, 'merged', 'morgan')
+  const after = await DB.prepare(
+    "SELECT COUNT(*) AS count FROM documents WHERE locale = 'en' AND deleted = 0",
+  ).first<{ count: number }>()
+  return after?.count ?? 0
+}
 
 Given(
   'the isolated HTTP environment is ready with the bilingual vault fixture',
@@ -38,6 +89,20 @@ Given('business reads use the Worker with local D1 and R2', async ({ backend }) 
 Given('I browse as a visitor', async ({ context }) => {
   await context.clearCookies()
 })
+
+Given('the viewport is exactly 360 CSS pixels wide', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 })
+})
+
+Given(
+  'a maintainer is browsing the Library',
+  async ({ backend, context, page, world }) => {
+    world.libraryTotal = await ensurePaginationFixture(backend)
+    await backend.authenticate(context, 'morgan')
+    await page.goto('/library')
+    await expect(page.locator('.library-row').first()).toBeVisible()
+  },
+)
 
 When('I open the entire persisted Atlas', async ({ page, traffic }) => {
   await page.goto('/atlas?scope=entire')
@@ -143,6 +208,82 @@ Then(
 Then('no successful read was supplied by the browser mock', async ({ traffic }) => {
   expect(traffic.mockRequests).toEqual([])
   expect(traffic.apiPaths.size).toBeGreaterThan(1)
+})
+
+Then('the persisted Atlas has no horizontal overflow', async ({ page }) => {
+  const dimensions = await page.evaluate(() => ({
+    documentWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+  }))
+  expect(dimensions.viewportWidth).toBe(360)
+  expect(dimensions.documentWidth).toBeLessThanOrEqual(dimensions.viewportWidth + 1)
+})
+
+When('I zoom and pan the persisted Atlas', async ({ page }) => {
+  const canvas = page.locator('.galaxy-canvas')
+  const zoomBefore = await canvas.getAttribute('data-zoom')
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
+  await expect(canvas).not.toHaveAttribute('data-zoom', zoomBefore ?? '')
+  await page.getByRole('button', { name: 'Pan map', exact: true }).click()
+  await expect(canvas).toHaveAttribute('data-camera-mode', 'pan')
+  const bounds = await canvas.boundingBox()
+  if (!bounds) throw new Error('The persisted Atlas canvas has no layout bounds')
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(
+    bounds.x + bounds.width / 2 + 36,
+    bounds.y + bounds.height / 2 + 24,
+  )
+  await page.mouse.up()
+})
+
+Then('the persisted Atlas remains usable without mobile overflow', async ({ page }) => {
+  const dimensions = await page.evaluate(() => ({
+    documentWidth: document.documentElement.scrollWidth,
+    viewportWidth: window.innerWidth,
+  }))
+  expect(dimensions.documentWidth).toBeLessThanOrEqual(dimensions.viewportWidth + 1)
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).focus()
+  await expect(page.getByRole('tooltip')).toHaveText('Zoom in')
+})
+
+When('I open the second Library page through HTTP', async ({ page }) => {
+  await page.goto('/library')
+  await expect(page.locator('.library-row').first()).toBeVisible()
+  const next = page.getByRole('button', { name: 'Next', exact: true })
+  await expect(next).toBeEnabled()
+  await Promise.all([page.waitForURL(/[?&]cursor=/), next.click()])
+  await expect(page.locator('.library-row').first()).toBeVisible()
+})
+
+Then('the Library shows an honest opaque-cursor range', async ({ page, world }) => {
+  const pagination = page.getByRole('navigation', { name: 'Pagination', exact: true })
+  await expect(pagination).toContainText(`${world.libraryTotal} total`)
+  await expect(pagination).not.toContainText('1–50 of')
+})
+
+When('I filter the Library to an absent title', async ({ page }) => {
+  const search = page.locator('.library-search input')
+  await search.fill('title-that-is-not-in-the-http-fixture')
+  await expect(page).toHaveURL(/[?&]q=title-that-is-not-in-the-http-fixture/)
+})
+
+Then('filtering resets pagination to the first HTTP page', async ({ page }) => {
+  await expect(page).not.toHaveURL(/[?&]cursor=/)
+  await expect(page).toHaveURL(/[?&]q=title-that-is-not-in-the-http-fixture/)
+})
+
+When('I navigate back to the second Library page', async ({ page }) => {
+  await page.goBack()
+  await expect(page).toHaveURL(/[?&]cursor=/)
+})
+
+Then('the second Library page and its cursor are restored', async ({ page, world }) => {
+  await expect(page).not.toHaveURL(/[?&]q=/)
+  await expect(page.locator('.library-row').first()).toBeVisible()
+  await expect(
+    page.getByRole('navigation', { name: 'Pagination', exact: true }),
+  ).toContainText(`${world.libraryTotal} total`)
 })
 
 When(

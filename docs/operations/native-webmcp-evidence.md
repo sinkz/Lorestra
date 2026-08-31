@@ -1,6 +1,6 @@
 # Native WebMCP evidence — local HTTP backend
 
-Date: 2026-08-31. Browser: Codex in-app browser, actual native WebMCP capability. Page: `http://127.0.0.1:4179/atlas?scope=entire`, frontend HTTP adapter, local Worker/D1/R2, synthetic bilingual vault. No fabricated `navigator.modelContext`, registry double or browser-response mock was used for these checks.
+Date: 2026-08-31. Browser: Codex in-app browser, actual native WebMCP capability. Page: `http://127.0.0.1:4179/atlas?scope=entire`, frontend HTTP adapter, local Worker/D1/R2, synthetic bilingual vault. No fabricated `navigator.modelContext`, registry double or browser-response mock was used for these checks. This report preserves the earlier single-call transport observations; the later bounded two-call release exercise is recorded in the [local release evidence](local-release-evidence.md).
 
 ## Observed
 
@@ -14,11 +14,11 @@ Date: 2026-08-31. Browser: Codex in-app browser, actual native WebMCP capability
 
 After the user authorized synthetic local sessions, actual native tools created and corrected a cookbook, denied contributor approval with `403 forbidden`, approved reviewed content and opened the visible human merge confirmation. The cookbook and a separate runbook correction were published; historical runbook v1 remained readable alongside v2. Independent local HTTP agents also authored, requested changes and reviewed documentation. See [the multi-agent execution record](native-agents-demo.md) for IDs, exact transitions and screenshots.
 
-The test exposed blocking `window.confirm` behavior, replaced by an asynchronous accessible modal. Cancel/Escape and stale-confirmation readback showed no publication. However, the native transport still timed out while awaiting human input: original cancellation/conflict payloads were not captured. After explicit confirmation, identical-payload, same-key retries recovered the persisted successful results without duplicate publication. This limitation remains open; do not call the complete native B29–B30 gate passed.
+The test exposed blocking `window.confirm` behavior, replaced by an asynchronous accessible modal. Cancel/Escape and stale-confirmation readback showed no publication. However, that earlier single-call native transport still timed out while awaiting human input: its original cancellation/conflict payloads were not captured. After explicit confirmation, identical-payload, same-key retries recovered the persisted successful results without duplicate publication. The later release exercise closes this response gap with prompt `confirmation_required`/cancellation results and an explicit same-key retry; it is the current evidence for the two-phase interaction, while the historical observations here must not be read as captured responses.
 
 ## Two-agent concurrency follow-up
 
-An additional [two-agent native-tab experiment](dual-webmcp-tabs.md) later recorded overlapping WebMCP updates from two agents on the same proposal: one succeeded and the other returned `409 proposal_version_conflict`. Explicit reconciliation published both contributions once. Both tabs used the same synthetic principal, so this does not establish user/session isolation. The competing stale-document merge retained its unmerged state but still lacked the original response because of the confirmation transport timeout.
+An additional [two-agent native-tab experiment](dual-webmcp-tabs.md) later recorded overlapping WebMCP updates from two agents on the same proposal: one succeeded and the other returned `409 proposal_version_conflict`. Explicit reconciliation published both contributions once. Both tabs used the same synthetic principal, so this does not establish user/session isolation. In that historical experiment, the competing stale-document merge retained its unmerged state but still lacked the original response because of the confirmation transport timeout; the later bounded two-call result is recorded in the [local release evidence](local-release-evidence.md).
 
 ## Not certified by this evidence
 

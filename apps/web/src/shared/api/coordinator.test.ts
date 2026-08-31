@@ -7,7 +7,7 @@ import type {
   SessionResponse,
 } from '@lorestra/contracts'
 import { createKnowledgeAdapter, createProposalAdapter } from './client'
-import { coordinateClients } from './coordinator'
+import { coordinateClients, invalidateClientQueries } from './coordinator'
 import { ApiError } from './errors'
 import { sessionScope } from './session'
 
@@ -123,6 +123,50 @@ describe('shared UI and WebMCP mutation coordinator', () => {
     expect(queryClient.getQueryState(keys[2])?.isInvalidated).toBe(false)
     for (const key of keys.slice(3))
       expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true)
+    queryClient.clear()
+  })
+  it('broadcasts only after a committed mutation and labels its affected projections', async () => {
+    const queryClient = new QueryClient()
+    const publish = vi.fn()
+    const base = baseClients()
+    const coordinated = coordinateClients(base, queryClient, session, () => {}, {
+      crossTab: { publish },
+    })
+
+    const created = await coordinated.proposals.create(input)
+    expect(created.status).toBe('open')
+    expect(publish).toHaveBeenCalledOnce()
+    expect(publish).toHaveBeenCalledWith('proposal')
+
+    base.proposals.create = vi.fn(async () => {
+      throw new ApiError(503, 'SERVICE_UNAVAILABLE')
+    })
+    await expect(
+      coordinated.proposals.create({ ...input, title: 'failed' }),
+    ).rejects.toMatchObject({
+      status: 503,
+    })
+    expect(publish).toHaveBeenCalledOnce()
+    queryClient.clear()
+  })
+  it('invalidates mutable projections for a remote proposal without touching history snapshots', async () => {
+    const queryClient = new QueryClient()
+    const keys = [
+      ['scope', 'proposals'],
+      ['scope', 'proposal', 'proposal-1'],
+      ['scope', 'history'],
+      ['scope', 'documents'],
+      ['scope', 'document', 'slug', 'en', 'current'],
+      ['scope', 'document', 'slug', 'en', 1],
+      ['scope', 'graph'],
+      ['scope', 'search'],
+    ]
+    keys.forEach((key) => queryClient.setQueryData(key, { visible: true }))
+    await invalidateClientQueries(queryClient, 'proposal')
+    for (const key of keys.slice(0, 3))
+      expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true)
+    for (const key of keys.slice(3))
+      expect(queryClient.getQueryState(key)?.isInvalidated).toBe(false)
     queryClient.clear()
   })
   it('removes cached private content when write authority expires', async () => {

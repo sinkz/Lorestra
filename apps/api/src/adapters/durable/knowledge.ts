@@ -205,7 +205,10 @@ export function createKnowledgeReader(env: StorageBindings, identity: Identity) 
       )
         .bind(...ids)
         .all<{ id: string }>()
-      relations.push(...visible.results.map((item) => item.id))
+      const visibleIds = new Set(visible.results.map((item) => item.id))
+      // SQLite does not preserve the order of an IN-list. The revision snapshot
+      // is the authority for relation order; SQL only decides which targets are visible.
+      relations.push(...ids.filter((id) => visibleIds.has(id)))
     }
     const resolvedLinks: Array<{ href: string; slug: string }> = []
     if (typeof snapshot.path === 'string') {

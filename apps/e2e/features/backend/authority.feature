@@ -30,6 +30,15 @@ Feature: Preserve authority and recovery over real HTTP
     Then the visitor cannot see that private document or restore the draft
     And the old and expired credentials cannot mutate through HTTP
 
+  @fallback
+  Scenario: B33 Keep the human workflow available without native WebMCP
+    Given Casey is using the HTTP application
+    And the browser has no native WebMCP API
+    When Casey submits a new process with explicit metadata and Markdown
+    When Morgan approves the proposal through the UI
+    And Morgan confirms the exact proposal merge through the UI
+    Then the human HTTP workflow publishes without fake native registration
+
   @security
   Scenario: B36 B37 Quotas and maintenance protect the vault while preserving drafts
     When a small write budget rejects Casey's UI submission

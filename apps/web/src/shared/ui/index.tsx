@@ -290,18 +290,24 @@ export function Pagination({
   onNext: (cursor: string | null) => void
 }) {
   const { t } = useTranslation()
-  const parsed = cursor ? Number.parseInt(cursor, 10) : 0
-  const start = Number.isFinite(parsed) && parsed >= 0 ? parsed + 1 : 1
-  const end = Math.min(start + pageSize - 1, pageInfo.totalCount)
+  // Durable HTTP cursors are opaque base64 values. Only the legacy mock's
+  // numeric offsets can support a truthful range label; never decode or
+  // partially parse an opaque cursor as if it were an offset.
+  const parsed = cursor && /^\d+$/.test(cursor) ? Number(cursor) : null
+  const start = parsed === null ? null : parsed + 1
+  const end =
+    start === null ? null : Math.min(start + pageSize - 1, pageInfo.totalCount)
   if (!pageInfo.hasPreviousPage && !pageInfo.hasNextPage) return null
   return (
     <nav className="pagination" aria-label={t('common.pagination')}>
       <span className="pagination-range">
-        {t('common.paginationRange', {
-          start,
-          end,
-          total: pageInfo.totalCount,
-        })}
+        {start === null || end === null
+          ? t('common.paginationTotal', { total: pageInfo.totalCount })
+          : t('common.paginationRange', {
+              start,
+              end,
+              total: pageInfo.totalCount,
+            })}
       </span>
       <div className="pagination-actions">
         <Button

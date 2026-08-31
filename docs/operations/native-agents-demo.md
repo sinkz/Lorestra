@@ -1,6 +1,6 @@
 # Local multi-agent documentation demonstration
 
-Date: 2026-08-31. Baseline: `ea73da5`. This is a local, synthetic demonstration authorized by the user, not a shared deployment or a third-party agent service.
+Date: 2026-08-31. Baseline: `ea73da5`. This is a local, synthetic demonstration authorized by the user, not a shared deployment or a third-party agent service. A later clean release exercise closes the original native confirmation-response gap; see the [local release evidence](local-release-evidence.md). The detailed observations below remain historical and are not rewritten as if the older transport run captured responses it did not capture.
 
 ## Environment and authority
 
@@ -72,7 +72,7 @@ Repeating the **identical** native merge payload with its **original** idempoten
 
 These replay keys identify synthetic operations, not credentials. A complete history read returned 36 events and `hasNextPage: false`; the cookbook had exactly one document-creation event and one merge event, both at `2026-08-31T04:52:43.608Z`, with revision `v1`. Recovery did not duplicate publication. A new key or changed payload is not a safe uncertain-response retry.
 
-The ordinary direct UI merge remains available. Native transport timeout behavior needs further browser/runtime validation before claiming a frictionless human-in-the-loop native gate.
+The ordinary direct UI merge remains available. The timeout described above belongs to the earlier single-call run; the current bounded two-call native interaction, including prompt cancellation and the explicit same-key retry, is recorded in the [local release evidence](local-release-evidence.md).
 
 ## Automated verification and visual inspection
 

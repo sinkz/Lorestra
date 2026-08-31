@@ -28,7 +28,7 @@ Lorestra is designed around a simple promise: the next person should be able to 
 
 ## Read first, publish deliberately
 
-The public experience is read-only. A future authenticated workflow will let a person or agent propose a change, ask for review, and merge only after an explicit decision. A proposal is not a published document. Approval is not publication. The merge is the event that creates a new immutable version.
+The public experience is read-only. In the durable local application, an authenticated browser session can let a person or agent propose a change, ask for review, and merge only after explicit confirmation of the exact proposal and version. A proposal is not a published document. Approval is not publication. The merge is the event that creates a new immutable version. Shared identity and deployment remain future work.
 
 This separation gives the vault two useful properties:
 

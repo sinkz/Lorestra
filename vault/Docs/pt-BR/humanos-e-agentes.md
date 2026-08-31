@@ -22,7 +22,7 @@ nav:
 
 # Pessoas e múltiplos agentes
 
-O Lorestra trata pessoas e agentes como pares na descoberta, mas não como autoridades indistinguíveis. Um agente pode buscar, resumir, comparar revisões, conectar documentos e preparar uma proposta. A pessoa revisora decide se a evidência e o escopo são suficientes para publicar, a menos que uma policy futura conceda explicitamente uma função autenticada equivalente.
+O Lorestra trata pessoas e agentes como pares na descoberta, mas não como autoridades indistinguíveis. Na integração local durável atual, um agente autenticado herda as capacidades da sessão do navegador: pode buscar, resumir, comparar revisões, conectar documentos e preparar uma proposta, mas não recebe autoridade do texto dos documentos nem da entrada de uma ferramenta. Uma pessoa revisora confirma explicitamente o merge. Identidade compartilhada de agentes e deploy ficam fora do escopo local atual.
 
 ## Torne cada handoff verificável
 

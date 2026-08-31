@@ -10,6 +10,7 @@ export default defineConfig({
   testDir,
   globalSetup: './fixtures/mock-server.ts',
   fullyParallel: false,
+  workers: 1,
   forbidOnly: true,
   retries: 0,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],

@@ -69,20 +69,80 @@ The mock also includes **Orion (engineering), Lyra (learning), and Cygnus (resea
 
 ### Requirements
 
-- Node.js `24.x`
+- Node.js `24.x` (the repository requires `>=24.12.0 <25`)
 - pnpm `11.24.0` through Corepack
+
+After cloning this repository, enter its root and install the pinned dependency graph:
 
 ```bash
 corepack enable
+corepack prepare pnpm@11.24.0 --activate
 pnpm install --frozen-lockfile
-pnpm dev
 ```
 
-Development defaults to the disposable mock for quick visual exploration. Production builds default to HTTP and contain no mock fixture chunk. To run the durable product locally, follow the next section; no Cloudflare account or resource is needed.
+### Durable local release (recommended quick start)
+
+This path runs the production HTTP bundle and the real Worker/D1/R2 runtime behind one local supervisor command. The supervisor owns signals and keeps the private Worker/preview runtime in an isolated child, so Ctrl+C/SIGTERM can request cooperative IPC shutdown without Miniflare or Vite exiting first. No Cloudflare account or resource is needed.
+
+```bash
+pnpm backend:init
+pnpm local:build
+pnpm local:start
+```
+
+Run `pnpm backend:init` once for a new local store. It applies migrations, imports the bilingual Markdown seed and creates an ignored session file at `.lorestra/state/local-session.json`; it prints the file path, never the token. Open `http://127.0.0.1:4173`, choose **Sign in**, and copy only the `token` value from that file. This is a synthetic local credential, not shared production authentication.
+
+`local:start` serves the built UI on `127.0.0.1:4173` and proxies `/api` to a private child Worker's ephemeral loopback port. The supervisor sends cooperative IPC shutdown on Ctrl+C/SIGTERM, then closes the child and operator lock. To restart, run `pnpm local:start` again; the named/local state is preserved and startup never reseeds or resets it. Windows physical Ctrl+C delivery is not certified in the current validation environment. Stop the runner before renewing a credential:
+
+```bash
+pnpm backend:session
+```
+
+After source changes, run `pnpm local:build` again before restarting. Use `--state=path` consistently with `backend:init`, `backend:session` and `local:start` when keeping more than one local store. The runner rejects a missing initialization marker, missing production bundle or occupied preview port instead of silently switching to mock data or another port.
+
+The human interface is browser-agnostic. Native WebMCP registration and the two-phase authorization flow are validated only in the Codex in-app browser; other compatible browsers remain unverified. See the [WebMCP implementation status](https://github.com/webmachinelearning/webmcp/blob/main/implementation-status.md), [Chrome WebMCP documentation](https://developer.chrome.com/docs/ai/webmcp) and the [local evidence record](docs/operations/local-release-evidence.md).
+
+### Optional Docker release
+
+Docker is an optional packaging path. The image runs as a non-root user, publishes only host loopback `127.0.0.1:4173`, and stores D1/R2 state in the named `lorestra-state` volume. Initialize explicitly; startup never seeds:
+
+```bash
+docker compose build
+docker compose run --name lorestra-init --no-deps lorestra node scripts/backend-local.mjs init
+mkdir -p .lorestra/state
+docker cp lorestra-init:/app/.lorestra/state/local-session.json .lorestra/state/local-session.json
+docker rm lorestra-init
+docker compose up
+```
+
+On PowerShell, create the ignored destination with `New-Item -ItemType Directory -Force .lorestra/state` before `docker cp`. The copy is for the local sign-in dialog; no token is printed. Renew a Docker session with the same named one-shot pattern and copy command, replacing `init` with `session`. `docker compose down` preserves the named volume; do not use `docker compose down -v` unless intentionally deleting the local vault. Docker execution is not certified in the current validation environment because no Docker engine was available.
+
+### Disposable development and HTTP workflows
+
+For quick visual exploration, `pnpm dev` keeps the removable in-memory mock selected. The existing two-process durable development workflow remains available when live reload is useful:
+
+Configure the HTTP adapter in an ignored local `apps/web/.env` copied from [`apps/web/.env.example`](apps/web/.env.example):
+
+```dotenv
+VITE_DATA_ADAPTER=http
+VITE_LORESTRA_API_URL=/api
+LORESTRA_API_ORIGIN=http://127.0.0.1:8787
+```
+
+The Vite proxy keeps browser requests same-origin under `/api`. That switch happens only in the composition root; pages, query hooks, widgets and WebMCP tools do not import fixtures.
+
+Then start the durable two-process workflow:
+
+```bash
+pnpm backend:init
+pnpm backend:dev
+pnpm --filter @lorestra/web dev
+```
 
 Useful focused commands:
 
 ```bash
+pnpm test:local
 pnpm --filter @lorestra/web dev
 pnpm --filter @lorestra/api dev
 pnpm check
@@ -93,26 +153,7 @@ pnpm demo:webmcp
 
 The WebMCP demo requires a compatible local browser. Native registration evidence and authenticated durable workflow evidence are separate gates; see the [evidence guide](apps/e2e/WEBMCP-DEMO.md).
 
-### Run the durable local backend
-
-```sh
-pnpm backend:init
-pnpm backend:dev
-```
-
-Initialization imports the actual bilingual Markdown vault into local D1/R2 and creates a private development session file under ignored `.lorestra/state/`. The CLI prints its location, never its token. Start the frontend in a second terminal after configuring the HTTP adapter below, then open `http://127.0.0.1:5173`. Choose **Sign in** and use the locally generated token. It is a development credential, not shared production authentication.
-
-For seed ownership, session expiry, maintenance, export, backup and recovery, read [Local backend operations](docs/operations/local-backend.md). Stop the backend before operator commands; initialization is explicit, never a hidden startup seed.
-
-Copy [`apps/web/.env.example`](apps/web/.env.example) to an ignored local `.env` file and select the HTTP adapter:
-
-```dotenv
-VITE_DATA_ADAPTER=http
-VITE_LORESTRA_API_URL=/api
-LORESTRA_API_ORIGIN=http://127.0.0.1:8787
-```
-
-That switch happens only in the composition root. Pages, query hooks, widgets, and WebMCP tools do not import fixtures and do not change when the mock package is removed.
+For seed ownership, session expiry, maintenance, export, backup and recovery, read [Local backend operations](docs/operations/local-backend.md). Stop the local server before operator commands; initialization is explicit, never a hidden startup seed.
 
 ## Architecture
 
@@ -161,6 +202,8 @@ The test suite concentrates on boundaries that can lose knowledge or violate gov
 - targeted Stryker mutation testing for critical backend search and workflow rules.
 
 `pnpm check` runs formatting, lint, dependency boundaries, unused-code analysis, type checking, unit/integration tests, and production builds. E2E and mutation tests are explicit gates so the normal feedback loop stays fast.
+
+The default quality scripts are intentionally serial for bounded local resource use: recursive workspace build/test/typecheck commands use one workspace at a time, package Vitest commands use one worker without file parallelism, and Playwright uses one worker. These settings serialize execution; they do not skip checks.
 
 Run `pnpm test:e2e:http` for the isolated persistent-backend browser suite, `pnpm test:e2e:http:smoke` for its smoke subset, and `pnpm test:tooling` for import/storage/backup tooling. Tests use fictional data and exclude credential-bearing traces from artifacts. See the [scale report](docs/reports/backend-scale.md) for measured limits, not a hosting SLA.
 

@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Button, ModalDialog } from '../../shared/ui'
+import { Button, formatDate, ModalDialog } from '../../shared/ui'
 import type { createMergeConfirmationController } from './confirmation'
 
 export function WebMcpConfirmationDialog({
@@ -8,10 +8,10 @@ export function WebMcpConfirmationDialog({
 }: {
   controller: ReturnType<typeof createMergeConfirmationController>
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const request = useSyncExternalStore(controller.subscribe, controller.getSnapshot)
   useEffect(() => () => controller.cancel(), [controller])
-  const cancel = () => controller.respond(request, false)
+  const cancel = () => controller.cancel(request)
 
   return (
     <ModalDialog
@@ -23,11 +23,21 @@ export function WebMcpConfirmationDialog({
     >
       <div className="memory-dialog-card">
         <span className="eyebrow">WebMCP</span>
-        <h2 id="webmcp-confirm-merge-title">{t('editor.confirmMerge')}</h2>
+        <h2 id="webmcp-confirm-merge-title">{t('editor.authorizeMerge')}</h2>
         <p id="webmcp-confirm-merge-description">
-          {t('editor.mergeExplanation', {
+          {t('editor.webmcpMergeExplanation', {
             title: request?.title,
             version: request?.proposalVersion,
+          })}
+        </p>
+        <p className="field-hint">
+          {t('editor.mergeConfirmationExpiry', {
+            expiresAt: request?.expiresAt
+              ? formatDate(request.expiresAt, i18n.language, {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                })
+              : undefined,
           })}
         </p>
         <dl className="merge-confirmation-target">
@@ -53,7 +63,7 @@ export function WebMcpConfirmationDialog({
             {t('document.cancel')}
           </Button>
           <Button variant="primary" onClick={() => controller.respond(request, true)}>
-            {t('editor.confirmMerge')}
+            {t('editor.authorizeMerge')}
           </Button>
         </div>
       </div>

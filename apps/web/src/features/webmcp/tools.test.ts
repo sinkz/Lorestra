@@ -1,13 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createMockClients } from '@lorestra/mock-vault'
+import type { MemberRole, SessionResponse } from '@lorestra/contracts'
 
 import { createKnowledgeAdapter, createProposalAdapter } from '../../shared/api/client'
+import { ApiError } from '../../shared/api/errors'
 import type { AppClients, FolderNode, Proposal } from '../../shared/model/types'
 import { registerLorestraWebMcpTools } from './register'
 import { createMergeConfirmationController } from './confirmation'
 import { createLorestraWebMcpTools } from './tools'
-import type { WebMcpToolDefinition } from './types'
+import type { WebMcpInteraction, WebMcpToolDefinition } from './types'
+
+function confirmedInteraction(): WebMcpInteraction {
+  return {
+    requestMergeConfirmation: (input) => ({
+      status: 'confirmation_confirmed',
+      confirmation: {
+        proposalId: input.proposalId,
+        proposalVersion: input.proposalVersion,
+        contentHash: input.contentHash,
+      },
+    }),
+  }
+}
 
 function clients(): AppClients {
   const mock = createMockClients()
@@ -67,11 +82,43 @@ function errorMessage(
 function withClients(overrides: {
   knowledge?: Partial<AppClients['knowledge']>
   proposals?: Partial<AppClients['proposals']>
+  session?: NonNullable<AppClients['session']>
 }): AppClients {
   const base = clients()
   return {
     knowledge: { ...base.knowledge, ...overrides.knowledge },
     proposals: { ...base.proposals, ...overrides.proposals },
+    ...(overrides.session ? { session: overrides.session } : {}),
+  }
+}
+
+function sessionFor(role: MemberRole, mergeProposal: boolean): SessionResponse {
+  return {
+    vaultId: 'lorestra-vault',
+    principal: { id: `local-${role}`, name: `Local ${role}`, role },
+    capabilities: {
+      readPublic: true,
+      readInternal: true,
+      readProposals: true,
+      createProposal: role !== 'reader',
+      editOwnProposal: role !== 'reader',
+      editAnyProposal: role === 'maintainer',
+      reviewProposal: role === 'maintainer',
+      mergeProposal,
+      manageVault: role === 'maintainer',
+    },
+    mode: 'local',
+    csrfToken: 'csrf-token',
+    expiresAt: '2026-09-01T00:00:00.000Z',
+    readOnly: { enabled: false, reason: null },
+    limits: {
+      maxDocumentBytes: 65536,
+      maxProposalBytes: 262144,
+      maxFilesPerProposal: 20,
+      maxOpenProposals: 100,
+      maxRequestsPerMinute: 240,
+      maxWritesPerMinute: 60,
+    },
   }
 }
 
@@ -111,9 +158,7 @@ describe('Lorestra WebMCP tools', () => {
 
   beforeEach(() => {
     appClients = clients()
-    tools = createLorestraWebMcpTools(appClients, () => 'en', {
-      confirmMerge: () => true,
-    })
+    tools = createLorestraWebMcpTools(appClients, () => 'en', confirmedInteraction())
   })
 
   it('registers a unique, governed tool surface and unregisters it with one signal', async () => {
@@ -408,7 +453,9 @@ describe('Lorestra WebMCP tools', () => {
   })
   it('requires human confirmation and rejects a stale reviewed version', async () => {
     const transition = vi.fn(async () => proposal({ status: 'merged' }))
-    const confirmMerge = vi.fn(() => false)
+    const requestMergeConfirmation = vi.fn(() => ({
+      status: 'confirmation_declined' as const,
+    }))
     const tools = createLorestraWebMcpTools(
       withClients({
         proposals: {
@@ -417,7 +464,7 @@ describe('Lorestra WebMCP tools', () => {
         },
       }),
       () => 'en',
-      { confirmMerge },
+      { requestMergeConfirmation },
     )
     const merge = toolNamed(tools, 'lorestra_transition_proposal')
     const stale = await merge.execute({
@@ -427,7 +474,12 @@ describe('Lorestra WebMCP tools', () => {
       idempotencyKey: 'stale',
     })
     expect(stale.isError).toBe(true)
-    expect(confirmMerge).not.toHaveBeenCalled()
+    expect(structured(stale)).toMatchObject({
+      code: 'proposal_version_conflict',
+      status: 409,
+      versions: { currentProposalVersion: 2 },
+    })
+    expect(requestMergeConfirmation).not.toHaveBeenCalled()
     const denied = await merge.execute({
       proposalId: 'proposal-test',
       status: 'merged',
@@ -435,14 +487,57 @@ describe('Lorestra WebMCP tools', () => {
       idempotencyKey: 'declined',
     })
     expect(denied.isError).toBe(true)
-    expect(confirmMerge).toHaveBeenCalledWith(
+    expect(requestMergeConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
         proposalId: 'proposal-test',
         proposalVersion: 2,
         contentHash: 'a'.repeat(64),
       }),
-      { signal: undefined },
+      expect.objectContaining({
+        binding: expect.objectContaining({
+          idempotencyKey: 'declined',
+        }),
+        signal: undefined,
+      }),
     )
+    expect(structured(denied).code).toBe('confirmation_declined')
+    expect(transition).not.toHaveBeenCalled()
+  })
+
+  it('preflights merge authority and never opens a prompt for a contributor', async () => {
+    const requestMergeConfirmation = vi.fn(() => ({
+      status: 'confirmation_required' as const,
+      request: {
+        proposalId: 'proposal-test',
+        proposalVersion: 1,
+        contentHash: 'a'.repeat(64),
+        title: 'Test proposal',
+        expiresAt: '2026-08-31T00:00:00.000Z',
+      },
+    }))
+    const get = vi.fn(async () => proposal({ status: 'approved' }))
+    const transition = vi.fn(async () => proposal({ status: 'merged' }))
+    const tools = createLorestraWebMcpTools(
+      withClients({
+        session: {
+          getSession: vi.fn(async () => sessionFor('contributor', false)),
+          logout: vi.fn(async () => undefined),
+        },
+        proposals: { get, transition },
+      }),
+      () => 'en',
+      { requestMergeConfirmation },
+    )
+    const result = await toolNamed(tools, 'lorestra_transition_proposal').execute({
+      proposalId: 'proposal-test',
+      status: 'merged',
+      expectedProposalVersion: 1,
+      idempotencyKey: 'contributor-merge',
+    })
+    expect(result.isError).toBe(true)
+    expect(structured(result)).toMatchObject({ status: 403, code: 'forbidden' })
+    expect(requestMergeConfirmation).not.toHaveBeenCalled()
+    expect(get).not.toHaveBeenCalled()
     expect(transition).not.toHaveBeenCalled()
   })
 
@@ -467,31 +562,57 @@ describe('Lorestra WebMCP tools', () => {
     expect(transition).not.toHaveBeenCalled()
   })
 
-  it('sends the original confirmed tuple even if the proposal changes while awaiting a decision', async () => {
+  it('does not treat an agent-supplied confirmation object as human authority', async () => {
+    const transition = vi.fn(async () => proposal({ status: 'merged' }))
+    const tools = createLorestraWebMcpTools(
+      withClients({
+        proposals: {
+          get: vi.fn(async () => proposal({ status: 'approved' })),
+          transition,
+        },
+      }),
+      () => 'en',
+    )
+    const result = await toolNamed(tools, 'lorestra_transition_proposal').execute({
+      proposalId: 'proposal-test',
+      status: 'merged',
+      expectedProposalVersion: 1,
+      confirmation: {
+        proposalId: 'proposal-test',
+        proposalVersion: 1,
+        contentHash: 'a'.repeat(64),
+      },
+      idempotencyKey: 'forged-confirmation',
+    })
+    expect(result.isError).toBe(true)
+    expect(structured(result).code).toBe('confirmation_unavailable')
+    expect(transition).not.toHaveBeenCalled()
+  })
+
+  it('returns confirmation_required promptly and sends the frozen tuple on an identical retry', async () => {
     const current = proposal({ status: 'approved', proposalVersion: 2 })
     const transition = vi.fn(async () => proposal({ status: 'merged' }))
-    let respond: ((approved: boolean) => void) | undefined
+    const interaction = createMergeConfirmationController()
     const tools = createLorestraWebMcpTools(
       withClients({ proposals: { get: vi.fn(async () => current), transition } }),
       () => 'en',
-      {
-        confirmMerge: () =>
-          new Promise<boolean>((resolve) => {
-            respond = resolve
-          }),
-      },
+      interaction,
     )
-    const pending = toolNamed(tools, 'lorestra_transition_proposal').execute({
+    const merge = toolNamed(tools, 'lorestra_transition_proposal')
+    const input = {
       proposalId: current.id,
       status: 'merged',
       expectedProposalVersion: 2,
       idempotencyKey: 'frozen-merge',
-    })
-    await vi.waitFor(() => expect(respond).toBeTypeOf('function'))
-    current.proposalVersion = 3
-    current.contentHash = 'b'.repeat(64)
-    respond!(true)
-    await pending
+    } as const
+    const first = await merge.execute(input)
+    expect(first.isError).toBe(true)
+    expect(structured(first).code).toBe('confirmation_required')
+    expect(transition).not.toHaveBeenCalled()
+    const request = interaction.getSnapshot()!
+    interaction.respond(request, true)
+    const second = await merge.execute(input)
+    expect(second.isError).not.toBe(true)
     expect(transition).toHaveBeenCalledWith(
       expect.objectContaining({
         expectedProposalVersion: 2,
@@ -503,6 +624,115 @@ describe('Lorestra WebMCP tools', () => {
       }),
       expect.any(Object),
     )
+  })
+
+  it('rejects a same-key payload change after acceptance without opening another prompt', async () => {
+    const current = proposal({ status: 'approved', proposalVersion: 2 })
+    const transition = vi.fn(async () => proposal({ status: 'merged' }))
+    const interaction = createMergeConfirmationController()
+    const tools = createLorestraWebMcpTools(
+      withClients({
+        proposals: {
+          get: vi.fn(async () => current),
+          transition,
+        },
+      }),
+      () => 'en',
+      interaction,
+    )
+    const merge = toolNamed(tools, 'lorestra_transition_proposal')
+    const firstInput = {
+      proposalId: current.id,
+      status: 'merged' as const,
+      expectedProposalVersion: 2,
+      idempotencyKey: 'same-key',
+    }
+    expect((await merge.execute(firstInput)).isError).toBe(true)
+    interaction.respond(interaction.getSnapshot(), true)
+    const changed = await merge.execute({ ...firstInput, reason: 'Changed payload' })
+    expect(changed.isError).toBe(true)
+    expect(structured(changed).code).toBe('confirmation_mismatch')
+    expect(transition).not.toHaveBeenCalled()
+    interaction.dispose()
+  })
+
+  it('retains accepted consent for same-key recovery after an uncertain server response', async () => {
+    const current = proposal({ status: 'approved', proposalVersion: 2 })
+    let attempts = 0
+    const transition = vi.fn(async () => {
+      attempts += 1
+      if (attempts === 1) throw new ApiError(503, 'service_unavailable')
+      return proposal({ status: 'merged', proposalVersion: 3 })
+    })
+    const interaction = createMergeConfirmationController()
+    const tools = createLorestraWebMcpTools(
+      withClients({
+        proposals: {
+          get: vi.fn(async () => current),
+          transition,
+        },
+      }),
+      () => 'en',
+      interaction,
+    )
+    const merge = toolNamed(tools, 'lorestra_transition_proposal')
+    const input = {
+      proposalId: current.id,
+      status: 'merged' as const,
+      expectedProposalVersion: 2,
+      idempotencyKey: 'recover-key',
+    }
+    expect((await merge.execute(input)).isError).toBe(true)
+    interaction.respond(interaction.getSnapshot(), true)
+    const uncertain = await merge.execute(input)
+    expect(uncertain.isError).toBe(true)
+    expect(structured(uncertain)).toMatchObject({
+      code: 'service_unavailable',
+      status: 503,
+    })
+    const recovered = await merge.execute(input)
+    expect(recovered.isError).not.toBe(true)
+    expect(transition).toHaveBeenCalledTimes(2)
+    interaction.dispose()
+  })
+
+  it('keeps a guarded document-base conflict visible after human authorization', async () => {
+    const transition = vi.fn(async () =>
+      Promise.reject(
+        new ApiError(409, 'document_version_conflict', undefined, undefined, {
+          baseVersion: 1,
+          currentVersion: 2,
+        }),
+      ),
+    )
+    const interaction = createMergeConfirmationController()
+    const tools = createLorestraWebMcpTools(
+      withClients({
+        proposals: {
+          get: vi.fn(async () => proposal({ status: 'approved', proposalVersion: 2 })),
+          transition,
+        },
+      }),
+      () => 'en',
+      interaction,
+    )
+    const merge = toolNamed(tools, 'lorestra_transition_proposal')
+    const input = {
+      proposalId: 'proposal-test',
+      status: 'merged' as const,
+      expectedProposalVersion: 2,
+      idempotencyKey: 'base-conflict',
+    }
+    expect((await merge.execute(input)).isError).toBe(true)
+    interaction.respond(interaction.getSnapshot(), true)
+    const result = await merge.execute(input)
+    expect(result.isError).toBe(true)
+    expect(structured(result)).toMatchObject({
+      code: 'document_version_conflict',
+      status: 409,
+      versions: { baseVersion: 1, currentVersion: 2 },
+    })
+    interaction.dispose()
   })
 
   it('cancels pending native confirmation on registration disposal before any write', async () => {
@@ -529,15 +759,16 @@ describe('Lorestra WebMCP tools', () => {
       undefined,
       interaction,
     )
-    const pending = toolNamed(registered, 'lorestra_transition_proposal').execute({
+    const first = await toolNamed(registered, 'lorestra_transition_proposal').execute({
       proposalId: 'proposal-test',
       status: 'merged',
       expectedProposalVersion: 1,
       idempotencyKey: 'cancelled-native-merge',
     })
-    await vi.waitFor(() => expect(interaction.getSnapshot()).not.toBeNull())
+    expect(first.isError).toBe(true)
+    expect(structured(first).code).toBe('confirmation_required')
+    expect(interaction.getSnapshot()).not.toBeNull()
     registration.dispose()
-    expect((await pending).isError).toBe(true)
     expect(interaction.getSnapshot()).toBeNull()
     expect(transition).not.toHaveBeenCalled()
   })
@@ -570,7 +801,6 @@ describe('Lorestra WebMCP tools', () => {
     const transition = vi.fn(async () =>
       proposal({ status: 'merged', proposalVersion: 3 }),
     )
-    const confirmMerge = vi.fn(() => false)
     const retryTools = createLorestraWebMcpTools(
       withClients({
         proposals: {
@@ -579,7 +809,6 @@ describe('Lorestra WebMCP tools', () => {
         },
       }),
       () => 'en',
-      { confirmMerge },
     )
     const result = await toolNamed(retryTools, 'lorestra_transition_proposal').execute({
       proposalId: 'proposal-test',
@@ -588,7 +817,6 @@ describe('Lorestra WebMCP tools', () => {
       idempotencyKey: 'original-merge-key',
     })
     expect(result.isError).not.toBe(true)
-    expect(confirmMerge).not.toHaveBeenCalled()
     expect(transition).toHaveBeenCalledWith(
       expect.objectContaining({
         expectedProposalVersion: 2,

@@ -1,0 +1,24 @@
+services:
+  lorestra:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      LORESTRA_LOCAL_CONTAINER: '1'
+      LORESTRA_LOCAL_STATE: /app/.lorestra/state
+      LORESTRA_LOCAL_ORIGIN: http://127.0.0.1:4173
+      LORESTRA_LOCAL_WEB_PORT: 4173
+    init: true
+    ports:
+      - '127.0.0.1:4173:4173'
+    restart: 'no'
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 20s
+    tmpfs:
+      - /tmp
+    volumes:
+      - lorestra-state:/app/.lorestra/state
+
+volumes:
+  lorestra-state:

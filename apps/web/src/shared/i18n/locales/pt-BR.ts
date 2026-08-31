@@ -69,8 +69,13 @@ const ptBR = {
     proposalVersion: 'Versão {{version}} da proposta',
     baseVersion: 'Baseado no documento v{{version}}.',
     confirmMerge: 'Confirmar merge',
+    authorizeMerge: 'Autorizar merge',
     mergeExplanation:
       'Publicar “{{title}}”, versão {{version}} da proposta? Esta confirmação vale somente para a versão revisada.',
+    webmcpMergeExplanation:
+      'Autorize o agente a integrar “{{title}}”, versão {{version}} da proposta. Nada é publicado até que o agente repita explicitamente a mesma operação com a chave original.',
+    mergeConfirmationExpiry:
+      'Esta solicitação expira às {{expiresAt}}. Aceitar não publica; o agente precisa repetir esta operação exata.',
     conflictHelp:
       'Seu rascunho foi preservado. Abra o documento atual em outra aba, compare as versões e inicie outra proposta a partir dessa revisão. A versão base nunca é avançada silenciosamente.',
     unsent: 'Rascunho não enviado. As alterações aqui não estão salvas no vault.',
@@ -320,6 +325,7 @@ const ptBR = {
     required: 'Este campo é obrigatório.',
     pagination: 'Paginação',
     paginationRange: '{{start}}–{{end}} de {{total}}',
+    paginationTotal: '{{total}} no total',
     previous: 'Anterior',
     next: 'Próxima',
     published: 'Publicado',

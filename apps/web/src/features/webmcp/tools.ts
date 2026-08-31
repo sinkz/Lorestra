@@ -2,11 +2,21 @@ import {
   DurableCreateProposalInputSchema,
   DurableUpdateProposalInputSchema,
   DurableProposalTransitionInputSchema,
+  type DurableProposalTransitionInput,
+  type MergeConfirmation,
 } from '@lorestra/contracts'
 import { ApiError } from '../../shared/api/errors'
 import type { AppClients, FolderNode, Locale } from '../../shared/model/types'
 
-import type { WebMcpInteraction, WebMcpToolDefinition, WebMcpToolResult } from './types'
+import {
+  type MergeConfirmationBinding,
+  type MergeConfirmationDecision,
+  type MergeConfirmationInput,
+  type WebMcpInteraction,
+  type WebMcpToolDefinition,
+  type WebMcpToolResult,
+  WebMcpToolError,
+} from './types'
 
 const MAX_BODY_CHARS = 32_000
 const MAX_GRAPH_NODES = 200
@@ -151,6 +161,24 @@ function ensureActive(signal?: AbortSignal): void {
   signal?.throwIfAborted()
 }
 
+/** Stable JSON used to bind an explicit retry to the original operation. */
+function canonical(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, item]) => item !== undefined)
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+  return `{${entries
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
+    .join(',')}}`
+}
+
+function mergePayloadFingerprint(input: DurableProposalTransitionInput): string {
+  const operation = { ...input }
+  delete operation.confirmation
+  return canonical(operation)
+}
+
 function result(payload: unknown): WebMcpToolResult {
   return {
     content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
@@ -165,22 +193,85 @@ function failure(error: unknown): WebMcpToolResult {
       : error instanceof Error
         ? error.message
         : 'Unknown tool error.'
+  const payload = {
+    error: message,
+    ...(error instanceof WebMcpToolError
+      ? { code: error.code, ...(error.details ?? {}) }
+      : {}),
+    ...(error instanceof ApiError
+      ? {
+          code: error.code,
+          status: error.status,
+          requestId: error.requestId,
+          retryAfter: error.retryAfter,
+          versions: error.versions,
+        }
+      : {}),
+  }
   return {
-    content: [{ type: 'text', text: JSON.stringify({ error: message }) }],
-    structuredContent: {
-      error: message,
-      ...(error instanceof ApiError
-        ? {
-            code: error.code,
-            status: error.status,
-            requestId: error.requestId,
-            retryAfter: error.retryAfter,
-            versions: error.versions,
-          }
-        : {}),
-    },
+    content: [{ type: 'text', text: JSON.stringify(payload) }],
+    structuredContent: payload,
     isError: true,
   }
+}
+
+function confirmationError(
+  decision: Exclude<MergeConfirmationDecision, { status: 'confirmation_confirmed' }>,
+): WebMcpToolError {
+  const messages: Record<
+    Exclude<MergeConfirmationDecision, { status: 'confirmation_confirmed' }>['status'],
+    string
+  > = {
+    confirmation_required:
+      'Human confirmation is required. Ask the reviewer to authorize the visible request, then retry this exact operation with the same idempotency key.',
+    confirmation_declined:
+      'Human merge confirmation was declined. This invocation did not publish; read the proposal or history for any previous uncertain attempt, then use a new idempotency key only after a new explicit decision.',
+    confirmation_cancelled:
+      'Human merge confirmation was cancelled. This invocation did not publish; read the proposal or history for any previous uncertain attempt, then use a new idempotency key only after a new explicit decision.',
+    confirmation_expired:
+      'Human merge confirmation expired. This invocation did not publish; read the proposal or history for any previous uncertain attempt, then start a new explicit request with a new idempotency key.',
+    confirmation_busy:
+      'Another merge confirmation is already active in this browser session. Wait for that request to finish.',
+    confirmation_mismatch:
+      'The confirmation does not match the original merge payload. Re-read the approved proposal and preserve its exact idempotency key and payload.',
+  }
+  const details = decision.request
+    ? {
+        confirmation: {
+          proposalId: decision.request.proposalId,
+          proposalVersion: decision.request.proposalVersion,
+          contentHash: decision.request.contentHash,
+        },
+        title: decision.request.title,
+        expiresAt: decision.request.expiresAt,
+      }
+    : undefined
+  return new WebMcpToolError(decision.status, messages[decision.status], details)
+}
+
+function getHumanConfirmation(
+  interaction: WebMcpInteraction | undefined,
+  input: MergeConfirmationInput,
+  binding: MergeConfirmationBinding,
+  signal: AbortSignal | undefined,
+): MergeConfirmation {
+  const method = interaction?.requestMergeConfirmation
+  if (!method)
+    throw new WebMcpToolError(
+      'confirmation_unavailable',
+      'Human merge confirmation is unavailable. Nothing was published.',
+    )
+  const decision = method(input, { binding, signal })
+  if (decision.status !== 'confirmation_confirmed') throw confirmationError(decision)
+  return decision.confirmation
+}
+
+function settleHumanConfirmation(
+  interaction: WebMcpInteraction | undefined,
+  binding: MergeConfirmationBinding,
+  resolution: 'committed' | 'uncertain' | 'failed',
+): void {
+  interaction?.settleMergeConfirmation?.(binding, resolution)
 }
 
 function shorten(
@@ -329,9 +420,10 @@ export function createLorestraWebMcpTools(
           'Writes require a stable idempotencyKey. Retry uncertain results with that same key and identical payload.',
           'Create/update use explicit metadata and preserve reason separately from Markdown; update reopens the same proposal and invalidates approval.',
           'Read results expose cursor/offset continuation. Use them instead of assuming the returned slice is the complete vault.',
+          'For a native merge, the first call returns confirmation_required and opens a visible authorization. Wait for the reviewer, then retry the identical merge payload with the same idempotencyKey; accepting the dialog alone never publishes and there is no automatic retry.',
         ],
         writeBoundary:
-          'Create/update never publish. Approve and merge are distinct. Browser-agent merge requires human confirmation bound to proposal ID, approved version and content hash; all operations inherit the current session.',
+          'Create/update never publish. Approve and merge are distinct. Browser-agent merge uses a bounded two-call confirmation bound to proposal ID, approved version, content hash, payload and idempotency key; all operations inherit the current session. Confirmation cancellation, expiry, stale payloads and session disposal fail closed.',
         locale: getLocale(),
       }),
     }),
@@ -407,7 +499,7 @@ export function createLorestraWebMcpTools(
       name: 'lorestra_read_document',
       title: 'Read a Lorestra document',
       description:
-        'Reads one public published or archived Markdown document by slug, including status, metadata, relations, and revision context.',
+        'Reads one visible published or archived Markdown document by slug, including status, metadata, relations, and revision context. Authorized sessions may also read internal knowledge.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -459,7 +551,7 @@ export function createLorestraWebMcpTools(
       name: 'lorestra_search',
       title: 'Search Lorestra',
       description:
-        'Searches public published and archived Lorestra knowledge by title, tags, summary, and Markdown body. Read the document status before reuse.',
+        'Searches visible published and archived Lorestra knowledge by title, tags, summary, and Markdown body. Authorized sessions may also search internal knowledge; read status before reuse.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -766,13 +858,28 @@ export function createLorestraWebMcpTools(
       name: 'lorestra_transition_proposal',
       title: 'Review or merge a Lorestra proposal',
       description:
-        'Explicit governed review. Merge requires the exact approved proposalVersion and a native human confirmation of its content hash. A proposal is never auto-approved or auto-merged.',
+        'Explicit governed review. Merge requires the exact approved proposalVersion and a native human confirmation of its content hash. The first merge call opens confirmation; after the reviewer authorizes it, retry the identical operation with the same idempotency key. A proposal is never auto-approved or auto-merged.',
       inputSchema: writeSchema(DurableProposalTransitionInputSchema.toJSONSchema()),
       annotations: { readOnlyHint: false, untrustedContentHint: true },
       run: async (input, options) => {
         const { idempotencyKey, ...payload } = input
         const parsed = DurableProposalTransitionInputSchema.parse(payload)
         if (parsed.status === 'merged') {
+          const idempotency = requiredString({ idempotencyKey }, 'idempotencyKey', {
+            maxLength: 200,
+          })
+          // Fetch the current session before opening any human surface. The
+          // server remains authoritative, but this avoids showing a merge
+          // prompt to a contributor or a read-only session.
+          const session = await clients.session?.getSession({
+            signal: options?.signal,
+          })
+          if (
+            session &&
+            (!session.capabilities.mergeProposal || session.readOnly.enabled)
+          )
+            throw new ApiError(403, 'forbidden')
+
           const current = await clients.proposals.get(
             { proposalId: parsed.proposalId },
             { signal: options?.signal },
@@ -787,11 +894,24 @@ export function createLorestraWebMcpTools(
             ) ||
             !current.contentHash
           )
-            throw new Error(
-              'The exact approved proposal version must be read again before merge.',
+            throw new ApiError(
+              409,
+              'proposal_version_conflict',
+              undefined,
+              undefined,
+              current?.proposalVersion
+                ? { currentProposalVersion: current.proposalVersion }
+                : undefined,
             )
-          if (current.checks.some((check) => check.status !== 'passed'))
-            throw new Error('All checks must pass before merge.')
+          if (
+            current.status !== 'merged' &&
+            current.checks.some((check) => check.status !== 'passed')
+          )
+            throw new WebMcpToolError(
+              'checks_failed',
+              'All checks must pass before merge.',
+              { proposalId: current.id, proposalVersion: current.proposalVersion },
+            )
           const confirmation = {
             proposalId: current.id,
             proposalVersion: parsed.expectedProposalVersion,
@@ -799,24 +919,71 @@ export function createLorestraWebMcpTools(
           }
           if (
             parsed.confirmation &&
-            parsed.confirmation.contentHash !== current.contentHash
+            (parsed.confirmation.contentHash !== current.contentHash ||
+              parsed.confirmation.proposalId !== confirmation.proposalId ||
+              parsed.confirmation.proposalVersion !== confirmation.proposalVersion)
           )
-            throw new Error('Stale merge confirmation. Read the latest proposal.')
-          // A completed merge can only recover an idempotent result; a new key is rejected by the server.
-          const approved =
-            current.status === 'merged' ||
-            (interaction
-              ? await interaction.confirmMerge(
-                  Object.freeze({ ...confirmation, title: current.title }),
-                  { signal: options?.signal },
-                )
-              : false)
-          if (!approved)
-            throw new Error(
-              'Human merge confirmation was declined. Nothing was published.',
+            throw new WebMcpToolError(
+              'confirmation_stale',
+              'The merge confirmation is stale. Read the latest approved proposal before retrying.',
+              { confirmation },
             )
-          ensureActive(options?.signal)
-          parsed.confirmation = confirmation
+
+          // A completed merge can only recover a persisted idempotent result;
+          // a new key is still rejected by the guarded server transition.
+          let binding: MergeConfirmationBinding | undefined
+          if (current.status !== 'merged') {
+            const request = Object.freeze({ ...confirmation, title: current.title })
+            binding = Object.freeze({
+              ...confirmation,
+              idempotencyKey: idempotency,
+              // Exclude the derived confirmation object from the operation
+              // fingerprint so agents may echo it without changing payload.
+              payloadFingerprint: mergePayloadFingerprint(parsed),
+            })
+            let consented = false
+            try {
+              const humanConfirmation = getHumanConfirmation(
+                interaction,
+                request,
+                binding,
+                options?.signal,
+              )
+              consented = true
+              ensureActive(options?.signal)
+              parsed.confirmation = humanConfirmation
+            } catch (error) {
+              if (consented) settleHumanConfirmation(interaction, binding, 'uncertain')
+              throw error
+            }
+          } else {
+            parsed.confirmation = confirmation
+          }
+
+          try {
+            const proposal = await clients.proposals.transition(parsed, {
+              idempotencyKey: idempotency,
+              signal: options?.signal,
+            })
+            if (binding) settleHumanConfirmation(interaction, binding, 'committed')
+            return {
+              proposalId: proposal.id,
+              status: proposal.status,
+              proposalVersion: proposal.proposalVersion,
+              contentHash: proposal.contentHash,
+              publishedKnowledgeChanged: proposal.status === 'merged',
+            }
+          } catch (error) {
+            if (binding)
+              settleHumanConfirmation(
+                interaction,
+                binding,
+                error instanceof ApiError && error.status >= 400 && error.status < 500
+                  ? 'failed'
+                  : 'uncertain',
+              )
+            throw error
+          }
         }
         const proposal = await clients.proposals.transition(parsed, {
           idempotencyKey: requiredString({ idempotencyKey }, 'idempotencyKey', {

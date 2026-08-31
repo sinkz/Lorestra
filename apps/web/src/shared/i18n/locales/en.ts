@@ -67,8 +67,13 @@ const en = {
     proposalVersion: 'Proposal version {{version}}',
     baseVersion: 'Based on document v{{version}}.',
     confirmMerge: 'Confirm merge',
+    authorizeMerge: 'Authorize merge',
     mergeExplanation:
       'Publish “{{title}}”, proposal version {{version}}? This confirmation applies only to the version you reviewed.',
+    webmcpMergeExplanation:
+      'Authorize the agent to merge “{{title}}”, proposal version {{version}}. Nothing is published until the agent explicitly retries the same operation with its original key.',
+    mergeConfirmationExpiry:
+      'This request expires at {{expiresAt}}. Accepting does not publish; the agent must retry this exact operation.',
     conflictHelp:
       'Your draft is preserved. Open the current document in a new tab, compare versions, then start a new proposal from that revision. The base version is never advanced silently.',
     unsent: 'Unsent draft. Changes here are not saved to the vault.',
@@ -316,6 +321,7 @@ const en = {
     required: 'This field is required.',
     pagination: 'Pagination',
     paginationRange: '{{start}}–{{end}} of {{total}}',
+    paginationTotal: '{{total}} total',
     previous: 'Previous',
     next: 'Next',
     published: 'Published',

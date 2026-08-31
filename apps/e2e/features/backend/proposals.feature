@@ -37,6 +37,19 @@ Feature: Review real durable proposals
     Then all three files have one resulting revision and one publication event
     When the isolated Worker restarts without importing the seed again
     Then the publication and its exact document bodies remain available
+    And a fresh browser context reads the restarted publication
+
+  @storage
+  Scenario: B32 Archive a document through a reviewed proposal without losing history
+    Given Morgan has a reviewed archive proposal for the Orion process
+    When Morgan merges the archive proposal through the UI
+    Then the document is archived in Library and its prior revision remains readable
+
+  @storage
+  Scenario: B32 Delete a document through a reviewed proposal without erasing history
+    Given Morgan has a reviewed delete proposal for the Orion process
+    When Morgan merges the delete proposal through the UI
+    Then the document is absent from current Library and its prior revision remains readable
 
   @concurrency
   Scenario: B11 Preserve an unsent editor when its original document becomes stale
@@ -44,6 +57,22 @@ Feature: Review real durable proposals
     And Morgan publishes a newer version in another session
     When Casey submits the still-open stale editor
     Then the UI preserves the Markdown and identifies both conflicting versions
+
+  @concurrency
+  Scenario: Refresh a second tab without replacing its unsent editor
+    Given Morgan is editing a persisted document at version one in one browser tab
+    When Morgan publishes a newer version in a second browser tab
+    Then the first tab shows the published version and preserves its unsent Markdown
+    When Morgan submits the preserved stale editor
+    Then the stale editor still contains its Markdown and identifies both conflicting versions
+
+  @storage
+  Scenario: B19 Retry an offline mutation deliberately without losing its draft
+    Given Casey is editing a persisted document at version one
+    When the API becomes unreachable and Casey submits the unsent editor
+    Then the connection error preserves Casey's Markdown draft
+    When connectivity returns and Casey deliberately retries the same editor
+    Then one open proposal is created from the retained draft
 
   @concurrency @smoke
   Scenario: B12 Refuse a stale approved proposal without losing its content

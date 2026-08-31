@@ -25,3 +25,4 @@ worker-configuration.d.ts
 *.tsbuildinfo
 pnpm-debug.log*
 debug.log
+**/wrangler.log

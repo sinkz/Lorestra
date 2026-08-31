@@ -16,7 +16,9 @@
     "backend:restore": "node scripts/backend-backup.mjs restore",
     "backend:export": "node scripts/backend-backup.mjs export",
     "backend:import": "node scripts/backend-backup.mjs import",
-    "build": "pnpm --recursive --if-present build",
+    "build": "pnpm --workspace-concurrency=1 --recursive --if-present build",
+    "local:build": "node scripts/local-build.mjs",
+    "local:start": "node scripts/local-start.mjs",
     "check": "pnpm format:check && pnpm lint && pnpm deps:check && pnpm knip && pnpm peers:check && pnpm typecheck && pnpm test && pnpm build",
     "dev": "pnpm --parallel --recursive --if-present dev",
     "deps:check": "depcruise --config .dependency-cruiser.cjs apps packages",
@@ -27,14 +29,15 @@
     "lint": "eslint .",
     "peers:check": "pnpm peers check",
     "prepare": "husky",
-    "test": "pnpm --recursive --if-present test && pnpm test:tooling",
+    "test": "pnpm --workspace-concurrency=1 --recursive --if-present test && pnpm test:tooling && pnpm test:local",
     "test:tooling": "node --test --test-concurrency=1 --test-timeout=120000 scripts/backend-*.test.mjs",
     "test:e2e": "pnpm --filter @lorestra/e2e --if-present run test:e2e",
     "test:e2e:http": "pnpm --filter @lorestra/e2e run test:e2e:http",
     "test:e2e:http:smoke": "pnpm --filter @lorestra/e2e run test:e2e:http --grep @smoke",
     "test:e2e:http:mobile": "pnpm --filter @lorestra/e2e run test:e2e:http --project http-mobile",
+    "test:local": "node --test --test-concurrency=1 scripts/local-start.test.mjs",
     "test:mutation": "pnpm --filter @lorestra/api --if-present run test:mutation",
-    "typecheck": "pnpm --recursive --if-present typecheck"
+    "typecheck": "pnpm --workspace-concurrency=1 --recursive --if-present typecheck"
   },
   "devDependencies": {
     "esbuild": "0.28.1",

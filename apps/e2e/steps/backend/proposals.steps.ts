@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto'
 
-import { DurableProposalSchema, type DurableProposal } from '@lorestra/contracts'
+import {
+  DurableProposalSchema,
+  GraphResponseSchema,
+  type DurableProposal,
+} from '@lorestra/contracts'
 import { expect, type Page } from '@playwright/test'
 import { createBdd } from 'playwright-bdd'
 
@@ -26,11 +30,14 @@ async function proposalResponse(
   action: () => Promise<unknown>,
   method = 'POST',
 ) {
-  const response = page.waitForResponse(
-    (response) =>
+  const response = page.waitForResponse((response) => {
+    const path = new URL(response.url()).pathname
+    return (
       response.request().method() === method &&
-      /\/api\/proposals(?:\/[^/]+)?$/.test(new URL(response.url()).pathname),
-  )
+      (/\/api\/proposals$/.test(path) ||
+        /\/api\/proposals\/[^/]+(?:\/status)?$/.test(path))
+    )
+  })
   await action()
   const result = await response
   expect(result.status()).toBe(200)
@@ -68,6 +75,10 @@ Given('Casey is using the HTTP application', async ({ backend, context, page }) 
   await expect(
     page.getByRole('button', { name: 'New memory', exact: true }).first(),
   ).toBeEnabled()
+})
+
+Given('the browser has no native WebMCP API', async ({ page }) => {
+  expect(await page.evaluate(() => 'modelContext' in document)).toBe(false)
 })
 
 When(
@@ -239,6 +250,21 @@ Then(
   },
 )
 
+Then(
+  'the human HTTP workflow publishes without fake native registration',
+  async ({ backend, page, world }) => {
+    const proposal = required(world.proposal)
+    expect(proposal.status).toBe('merged')
+    const slug = proposal.changes[0]?.target.slug
+    if (!slug) throw new Error('The new proposal did not include a document slug')
+    const response = await backend.request(`/documents/${slug}?locale=en`, 'morgan')
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.revision.body).toBe(required(world.draft))
+    expect(await page.evaluate(() => 'modelContext' in document)).toBe(false)
+  },
+)
+
 Given('Casey has a persisted open proposal', async ({ backend, world }) => {
   world.original = await readDocument(backend)
   world.draft = '# First recovery draft\n\nCheck the revision.\n'
@@ -397,6 +423,34 @@ Then(
   },
 )
 
+Then(
+  'a fresh browser context reads the restarted publication',
+  async ({ backend, browser, world }) => {
+    const freshContext = await browser.newContext({
+      baseURL: 'http://127.0.0.1:4176',
+    })
+    try {
+      await backend.authenticate(freshContext, 'morgan')
+      const freshPage = await freshContext.newPage()
+      for (const change of required(world.input).changes) {
+        await freshPage.goto(`/documents/${change.target.slug}?locale=en`)
+        await expect(freshPage.locator('#page-heading')).toHaveText(change.target.title)
+        const marker =
+          typeof change.after === 'string'
+            ? change.after
+                .split('\n')
+                .find((line) => line.trim() && !line.trim().startsWith('#'))
+                ?.trim()
+            : null
+        if (marker)
+          await expect(freshPage.locator('.markdown-content')).toContainText(marker)
+      }
+    } finally {
+      await freshContext.close()
+    }
+  },
+)
+
 Given(
   'Morgan publishes a newer version in another session',
   async ({ backend, world }) => {
@@ -450,6 +504,371 @@ Then(
       )?.count,
     ).toBe(1)
     expect((await readDocument(backend)).body).toContain('Morgan published this first.')
+  },
+)
+
+Given(
+  'Morgan is editing a persisted document at version one in one browser tab',
+  async ({ backend, context, page, world }) => {
+    world.original = await readDocument(backend)
+    expect(world.original.version).toBe(1)
+    await backend.authenticate(context, 'morgan')
+    await page.goto('/documents/demo-orion-runbook?locale=en')
+    await page.getByRole('button', { name: 'Propose changes', exact: true }).click()
+    const editor = page.getByRole('dialog')
+    await expect(editor.getByLabel('Markdown', { exact: true })).toHaveValue(
+      world.original.body,
+    )
+    world.draft = '# Draft retained across tabs\n\nKeep this unsent body.\n'
+    await editor.getByLabel('Markdown', { exact: true }).fill(world.draft)
+  },
+)
+
+When(
+  'Morgan publishes a newer version in a second browser tab',
+  async ({ context, world }) => {
+    const original = required(world.original)
+    const second = await context.newPage()
+    world.auxiliaryPage = second
+    await second.goto(`/documents/${original.slug}?locale=en`)
+    await expect(second.locator('#page-heading')).toHaveText(original.title)
+    await second.getByRole('button', { name: 'Propose changes', exact: true }).click()
+    const editor = second.getByRole('dialog')
+    await editor
+      .getByLabel('Proposal title', { exact: true })
+      .fill('Cross-tab published correction')
+    await editor
+      .getByLabel('Proposal summary', { exact: true })
+      .fill('A publication made by the second tab')
+    await editor
+      .getByLabel('Markdown', { exact: true })
+      .fill('# Cross-tab revision\n\nPublished by the second tab.\n')
+    const created = await proposalResponse(second, () =>
+      editor.getByRole('button', { name: 'Propose changes', exact: true }).click(),
+    )
+    await expect(second.locator('#page-heading')).toHaveText(created.title)
+    const approved = await proposalResponse(
+      second,
+      () => second.getByRole('button', { name: 'Approve', exact: true }).click(),
+      'PATCH',
+    )
+    const response = await mergeInUi(second, approved)
+    expect(response.status()).toBe(200)
+  },
+)
+
+Then(
+  'the first tab shows the published version and preserves its unsent Markdown',
+  async ({ page, world }) => {
+    await expect(page.locator('.markdown-content')).toContainText(
+      'Published by the second tab.',
+    )
+    await expect(
+      page.getByRole('dialog').getByLabel('Markdown', { exact: true }),
+    ).toHaveValue(required(world.draft))
+  },
+)
+
+When('Morgan submits the preserved stale editor', async ({ page }) => {
+  const editor = page.getByRole('dialog')
+  const response = page.waitForResponse(
+    (result) =>
+      result.request().method() === 'POST' && result.url().endsWith('/api/proposals'),
+  )
+  await editor.getByRole('button', { name: 'Propose changes', exact: true }).click()
+  expect((await response).status()).toBe(409)
+})
+
+Then(
+  'the stale editor still contains its Markdown and identifies both conflicting versions',
+  async ({ page, world }) => {
+    await expect(
+      page.getByRole('dialog').getByLabel('Markdown', { exact: true }),
+    ).toHaveValue(required(world.draft))
+    await expect(page.getByRole('dialog').getByRole('alert')).toContainText('v1')
+    await expect(page.getByRole('dialog').getByRole('alert')).toContainText('v2')
+    await world.auxiliaryPage?.close()
+  },
+)
+
+When(
+  'the API becomes unreachable and Casey submits the unsent editor',
+  async ({ backend, page, world }) => {
+    const editor = page.getByRole('dialog')
+    world.draft = '# Offline recovery draft\n\nRetry this exact body later.\n'
+    await editor.getByLabel('Markdown', { exact: true }).fill(world.draft)
+    const { DB } = await backend.bindings()
+    world.proposalCountBefore =
+      (
+        await DB.prepare('SELECT COUNT(*) AS count FROM proposals').first<{
+          count: number
+        }>()
+      )?.count ?? 0
+    world.offlineAttempts = []
+    await page.route('**/api/proposals', async (route) => {
+      const request = route.request()
+      if (request.method() === 'POST') {
+        world.offlineAttempts?.push({
+          method: request.method(),
+          idempotencyKey: request.headers()['idempotency-key'],
+        })
+      }
+      await route.abort('failed')
+    })
+    await editor.getByRole('button', { name: 'Propose changes', exact: true }).click()
+  },
+)
+
+Then(
+  "the connection error preserves Casey's Markdown draft",
+  async ({ page, world }) => {
+    const editor = page.getByRole('dialog')
+    await expect(editor.getByRole('alert')).toContainText('Connection lost')
+    await expect(editor.getByLabel('Markdown', { exact: true })).toHaveValue(
+      required(world.draft),
+    )
+    expect(world.offlineAttempts).toHaveLength(1)
+    expect(world.offlineAttempts?.[0]?.method).toBe('POST')
+    expect(world.offlineAttempts?.[0]?.idempotencyKey).toBeTruthy()
+  },
+)
+
+When(
+  'connectivity returns and Casey deliberately retries the same editor',
+  async ({ page, world }) => {
+    await page.unroute('**/api/proposals')
+    const editor = page.getByRole('dialog')
+    const request = page.waitForRequest(
+      (result) =>
+        result.method() === 'POST' &&
+        new URL(result.url()).pathname === '/api/proposals',
+    )
+    world.proposal = await proposalResponse(page, () =>
+      editor.getByRole('button', { name: 'Propose changes', exact: true }).click(),
+    )
+    const retry = await request
+    world.offlineAttempts?.push({
+      method: retry.method(),
+      idempotencyKey: retry.headers()['idempotency-key'],
+    })
+  },
+)
+
+Then(
+  'one open proposal is created from the retained draft',
+  async ({ backend, page, world }) => {
+    const proposal = required(world.proposal)
+    await expect(page).toHaveURL(new RegExp(`/proposals/${proposal.id}$`))
+    const persisted = await readProposal(backend, proposal.id, 'casey')
+    expect(persisted.status).toBe('open')
+    expect(persisted.changes[0]?.after).toBe(required(world.draft))
+    const attempts = required(world.offlineAttempts)
+    expect(attempts).toHaveLength(2)
+    expect(attempts[0]?.idempotencyKey).toBe(attempts[1]?.idempotencyKey)
+    const { DB } = await backend.bindings()
+    const total =
+      (
+        await DB.prepare('SELECT COUNT(*) AS count FROM proposals').first<{
+          count: number
+        }>()
+      )?.count ?? 0
+    expect(total).toBe(required(world.proposalCountBefore) + 1)
+    const open =
+      (
+        await DB.prepare(
+          "SELECT COUNT(*) AS count FROM proposals WHERE status = 'open'",
+        ).first<{ count: number }>()
+      )?.count ?? 0
+    expect(open).toBe(1)
+  },
+)
+
+Given(
+  'Morgan has a reviewed archive proposal for the Orion process',
+  async ({ backend, world }) => {
+    const original = await readDocument(backend)
+    world.original = original
+    const { DB } = await backend.bindings()
+    const incoming = await DB.prepare(
+      'SELECT source_id FROM relations WHERE target_id = ? ORDER BY source_id LIMIT 1',
+    )
+      .bind(original.id)
+      .first<{ source_id: string }>()
+    expect(incoming?.source_id).toBeTruthy()
+    world.incomingReferenceSourceId = incoming?.source_id
+    const priorRevision = await DB.prepare(
+      'SELECT object_key FROM revisions WHERE document_id = ? AND version = ?',
+    )
+      .bind(original.id, original.version)
+      .first<{ object_key: string }>()
+    expect(priorRevision?.object_key).toBeTruthy()
+    world.priorRevisionObjectKey = priorRevision?.object_key
+    const change = changeDocument(original, original.body)
+    change.metadata = { ...change.metadata, status: 'archived' }
+    world.input = {
+      title: 'Archive the Orion recovery process',
+      summary: 'Retain the process as historical guidance',
+      changes: [change],
+    }
+    world.proposal = await transitionProposal(
+      backend,
+      await createProposal(backend, world.input, 'morgan'),
+      'approved',
+      'morgan',
+    )
+  },
+)
+
+When(
+  'Morgan merges the archive proposal through the UI',
+  async ({ backend, page, world }) => {
+    const proposal = required(world.proposal)
+    await openProposal(page, backend, proposal, 'morgan')
+    const response = await mergeInUi(page, proposal)
+    expect(response.status()).toBe(200)
+    world.proposal = DurableProposalSchema.parse(await response.json())
+    expect(world.proposal.status).toBe('merged')
+  },
+)
+
+Then(
+  'the document is archived in Library and its prior revision remains readable',
+  async ({ backend, page, world }) => {
+    const original = required(world.original)
+    const current = await readDocument(backend, original.slug, 'morgan')
+    expect(current.status).toBe('archived')
+    expect(current.version).toBe(original.version + 1)
+    expect(current.body).toBe(original.body)
+    const prior = await readDocument(backend, original.slug, 'morgan', original.version)
+    expect(prior.body).toBe(original.body)
+    const { DB } = await backend.bindings()
+    expect(
+      (
+        await DB.prepare(
+          'SELECT COUNT(*) AS count FROM revisions WHERE document_id = ?',
+        )
+          .bind(original.id)
+          .first<{ count: number }>()
+      )?.count,
+    ).toBe(original.version + 1)
+    const oldObject = await (
+      await backend.bindings()
+    ).VAULT.get(required(world.priorRevisionObjectKey))
+    expect(oldObject).not.toBeNull()
+    expect(await oldObject!.text()).toBe(original.body)
+    const graph = GraphResponseSchema.parse(
+      await (await backend.request('/graph?scope=entire&locale=en', 'morgan')).json(),
+    )
+    expect(graph.nodes.some((node) => node.id === original.id)).toBe(true)
+    expect(
+      graph.edges.some(
+        (edge) =>
+          edge.source === required(world.incomingReferenceSourceId) &&
+          edge.target === original.id,
+      ),
+    ).toBe(true)
+
+    await page.goto('/library?status=archived')
+    const archivedRow = page
+      .locator('.library-row')
+      .filter({ hasText: original.title })
+      .first()
+    await expect(archivedRow).toBeVisible()
+    await expect(archivedRow.locator('.library-title')).toHaveText(original.title)
+    await expect(archivedRow).toContainText('Archived')
+  },
+)
+
+Given(
+  'Morgan has a reviewed delete proposal for the Orion process',
+  async ({ backend, world }) => {
+    const original = await readDocument(backend, 'demo-orion-runbook', 'morgan')
+    world.original = original
+    const { DB } = await backend.bindings()
+    const incoming = await DB.prepare(
+      'SELECT source_id FROM relations WHERE target_id = ? ORDER BY source_id LIMIT 1',
+    )
+      .bind(original.id)
+      .first<{ source_id: string }>()
+    expect(incoming?.source_id).toBeTruthy()
+    world.incomingReferenceSourceId = incoming?.source_id
+    const priorRevision = await DB.prepare(
+      'SELECT object_key FROM revisions WHERE document_id = ? AND version = ?',
+    )
+      .bind(original.id, original.version)
+      .first<{ object_key: string }>()
+    expect(priorRevision?.object_key).toBeTruthy()
+    world.priorRevisionObjectKey = priorRevision?.object_key
+    const change = changeDocument(original, original.body)
+    change.changeType = 'deleted'
+    change.after = null
+    world.input = {
+      title: 'Delete the Orion recovery process',
+      summary: 'Remove the current process while retaining its evidence',
+      changes: [change],
+    }
+    world.proposal = await transitionProposal(
+      backend,
+      await createProposal(backend, world.input, 'morgan'),
+      'approved',
+      'morgan',
+    )
+  },
+)
+
+When(
+  'Morgan merges the delete proposal through the UI',
+  async ({ backend, page, world }) => {
+    const proposal = required(world.proposal)
+    await openProposal(page, backend, proposal, 'morgan')
+    const response = await mergeInUi(page, proposal)
+    expect(response.status()).toBe(200)
+    world.proposal = DurableProposalSchema.parse(await response.json())
+    expect(world.proposal.status).toBe('merged')
+  },
+)
+
+Then(
+  'the document is absent from current Library and its prior revision remains readable',
+  async ({ backend, page, world }) => {
+    const original = required(world.original)
+    const currentResponse = await backend.request(
+      `/documents/${original.slug}?locale=en`,
+      'morgan',
+    )
+    expect(currentResponse.status).toBe(404)
+    const prior = await readDocument(backend, original.slug, 'morgan', original.version)
+    expect(prior.body).toBe(original.body)
+    const { DB, VAULT } = await backend.bindings()
+    expect(
+      (
+        await DB.prepare(
+          'SELECT COUNT(*) AS count FROM revisions WHERE document_id = ?',
+        )
+          .bind(original.id)
+          .first<{ count: number }>()
+      )?.count,
+    ).toBe(original.version + 1)
+    const oldObject = await VAULT.get(required(world.priorRevisionObjectKey))
+    expect(oldObject).not.toBeNull()
+    expect(await oldObject!.text()).toBe(original.body)
+    const graph = GraphResponseSchema.parse(
+      await (await backend.request('/graph?scope=entire&locale=en', 'morgan')).json(),
+    )
+    expect(graph.nodes.some((node) => node.id === original.id)).toBe(false)
+    expect(
+      graph.edges.some(
+        (edge) => edge.source === original.id || edge.target === original.id,
+      ),
+    ).toBe(false)
+
+    await page.goto(`/library?q=${encodeURIComponent(original.title)}`)
+    await expect(page.locator('.toolbar')).toBeVisible()
+    await expect(
+      page.locator(
+        `a[href="/documents/${encodeURIComponent(original.slug)}?tab=preview"]`,
+      ),
+    ).toHaveCount(0)
   },
 )
 

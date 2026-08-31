@@ -11,6 +11,7 @@ import {
   DurableProposalSchema,
   type Document,
   type DurableCreateProposalInput,
+  type DurableProposal,
 } from '@lorestra/contracts'
 import { createDurableApp } from './create-durable-app.js'
 import { importVault } from '../adapters/durable/import-vault.js'
@@ -96,6 +97,31 @@ async function request(
     },
     bindings(),
   )
+}
+async function transition(
+  proposal: DurableProposal,
+  status: 'approved' | 'merged',
+): Promise<DurableProposal> {
+  const response = await request(`/proposals/${proposal.id}/status`, {
+    method: 'PATCH',
+    member: true,
+    body: {
+      proposalId: proposal.id,
+      expectedProposalVersion: proposal.proposalVersion,
+      status,
+      ...(status === 'merged'
+        ? {
+            confirmation: {
+              proposalId: proposal.id,
+              proposalVersion: proposal.proposalVersion,
+              contentHash: proposal.contentHash,
+            },
+          }
+        : {}),
+    },
+  })
+  expect(response.status).toBe(200)
+  return DurableProposalSchema.parse(await response.json())
 }
 beforeEach(async () => {
   await reset()
@@ -261,6 +287,247 @@ describe('durable HTTP boundary with actual D1 and R2', () => {
       await (await request('/documents/hidden', { member: true })).json(),
     )
     expect(privateDocument.document.visibility).toBe('internal')
+  })
+  it('preserves member relation order for deletion proposals seeded from document reads', async () => {
+    const response = DocumentResponseSchema.parse(
+      await (await request('/documents/by-id/first', { member: true })).json(),
+    )
+    expect(response.document.relations).toEqual(['second', 'hidden'])
+    const metadata = {
+      type: response.document.type,
+      folderId: response.document.folderId!,
+      tags: response.document.tags,
+      relations: response.document.relations,
+      visibility: response.document.visibility,
+      status: response.document.status,
+      locale: response.document.locale,
+    }
+    const deletion = {
+      title: 'Delete the first document',
+      summary: 'Retain the original revision as evidence.',
+      changes: [
+        {
+          id: 'delete-first',
+          target: {
+            documentId: response.document.id,
+            slug: response.document.slug,
+            title: response.document.title,
+          },
+          changeType: 'deleted' as const,
+          baseVersion: response.document.version,
+          after: null,
+          metadata,
+        },
+      ],
+    }
+    const created = await request('/proposals', {
+      method: 'POST',
+      member: true,
+      body: deletion,
+    })
+    expect(created.status).toBe(200)
+    const tampered = {
+      ...deletion,
+      changes: [
+        {
+          ...deletion.changes[0]!,
+          metadata: { ...metadata, tags: ['tampered'] },
+        },
+      ],
+    }
+    const rejected = await request('/proposals', {
+      method: 'POST',
+      member: true,
+      body: tampered,
+    })
+    expect(rejected.status).toBe(422)
+  })
+  it('accepts deletion from a member projection after a referenced target is tombstoned', async () => {
+    const added = DurableProposalSchema.parse(
+      await (
+        await request('/proposals', {
+          method: 'POST',
+          member: true,
+          body: {
+            title: 'Add a live relation target',
+            summary: 'Create a second live target for the projection check.',
+            changes: [
+              {
+                id: 'add-third',
+                target: { documentId: null, slug: 'third', title: 'Memory third' },
+                changeType: 'added',
+                baseVersion: null,
+                after: '# Third memory',
+                metadata: {
+                  folderId: 'docs',
+                  type: 'note',
+                  locale: 'en',
+                  visibility: 'public',
+                  status: 'published',
+                  tags: ['memory'],
+                  relations: [],
+                },
+              },
+            ],
+          },
+        })
+      ).json(),
+    )
+    await transition(await transition(added, 'approved'), 'merged')
+    const addedTarget = await env.DB.prepare('SELECT id FROM documents WHERE slug=?')
+      .bind('third')
+      .first<{ id: string }>()
+    expect(addedTarget?.id).toBeTruthy()
+    const thirdId = addedTarget!.id
+
+    const source = DocumentResponseSchema.parse(
+      await (await request('/documents/by-id/first', { member: true })).json(),
+    ).document
+    const sourceChange = {
+      id: 'add-third-relation',
+      target: { documentId: source.id, slug: source.slug, title: source.title },
+      changeType: 'modified' as const,
+      baseVersion: source.version,
+      after: source.body,
+      metadata: {
+        type: source.type,
+        folderId: source.folderId!,
+        tags: source.tags,
+        relations: [thirdId, 'second', 'hidden'],
+        visibility: source.visibility,
+        status: source.status,
+        locale: source.locale,
+      },
+    }
+    const modified = DurableProposalSchema.parse(
+      await (
+        await request('/proposals', {
+          method: 'POST',
+          member: true,
+          body: {
+            title: 'Add a reverse-ordered relation',
+            summary: 'Keep two live targets after the tombstone check.',
+            changes: [sourceChange],
+          },
+        })
+      ).json(),
+    )
+    await transition(await transition(modified, 'approved'), 'merged')
+
+    const target = DocumentResponseSchema.parse(
+      await (await request('/documents/by-id/hidden', { member: true })).json(),
+    ).document
+    const targetDeletion = DurableProposalSchema.parse(
+      await (
+        await request('/proposals', {
+          method: 'POST',
+          member: true,
+          body: {
+            title: 'Tombstone a relation target',
+            summary: 'Remove one target through the governed workflow.',
+            changes: [
+              {
+                id: 'delete-hidden',
+                target: {
+                  documentId: target.id,
+                  slug: target.slug,
+                  title: target.title,
+                },
+                changeType: 'deleted',
+                baseVersion: target.version,
+                after: null,
+                metadata: {
+                  type: target.type,
+                  folderId: target.folderId!,
+                  tags: target.tags,
+                  relations: target.relations,
+                  visibility: target.visibility,
+                  status: target.status,
+                  locale: target.locale,
+                },
+              },
+            ],
+          },
+        })
+      ).json(),
+    )
+    await transition(await transition(targetDeletion, 'approved'), 'merged')
+
+    const projectedSource = DocumentResponseSchema.parse(
+      await (await request('/documents/by-id/first', { member: true })).json(),
+    ).document
+    expect(projectedSource.relations).toEqual([thirdId, 'second'])
+    const metadata = {
+      type: projectedSource.type,
+      folderId: projectedSource.folderId!,
+      tags: projectedSource.tags,
+      relations: projectedSource.relations,
+      visibility: projectedSource.visibility,
+      status: projectedSource.status,
+      locale: projectedSource.locale,
+    }
+    const deletion = {
+      title: 'Delete the source projection',
+      summary: 'Delete from the exact member projection after one target tombstone.',
+      changes: [
+        {
+          id: 'delete-first-after-tombstone',
+          target: {
+            documentId: projectedSource.id,
+            slug: projectedSource.slug,
+            title: projectedSource.title,
+          },
+          changeType: 'deleted' as const,
+          baseVersion: projectedSource.version,
+          after: null,
+          metadata,
+        },
+      ],
+    }
+    expect(
+      (
+        await request('/proposals', {
+          method: 'POST',
+          member: true,
+          body: deletion,
+        })
+      ).status,
+    ).toBe(200)
+    for (const [label, relations] of [
+      ['omitted', [thirdId]],
+      ['reordered', ['second', thirdId]],
+    ] as const) {
+      const rejected = await request('/proposals', {
+        method: 'POST',
+        member: true,
+        body: {
+          ...deletion,
+          changes: [
+            {
+              ...deletion.changes[0]!,
+              id: `delete-first-${label}`,
+              metadata: { ...metadata, relations },
+            },
+          ],
+        },
+      })
+      expect(rejected.status).toBe(422)
+    }
+    const stale = await request('/proposals', {
+      method: 'POST',
+      member: true,
+      body: {
+        ...deletion,
+        changes: [
+          {
+            ...deletion.changes[0]!,
+            id: 'delete-first-stale',
+            baseVersion: projectedSource.version - 1,
+          },
+        ],
+      },
+    })
+    expect(stale.status).toBe(409)
   })
   it('paginates directory and library with filter-bound cursors, and searches accented content', async () => {
     const roots = NavigationResponseSchema.parse(

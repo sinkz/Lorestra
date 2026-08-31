@@ -1,7 +1,7 @@
 # Lorestra — plano de integração completa com o backend
 
 - Data: 2026-08-30.
-- Status: **backend local implementado e fluxo nativo autenticado exercitado; aceite integral L ainda depende das exceções de transporte nativo e das cláusulas restantes da matriz de testes; S não iniciado**.
+- Status: **backend local implementado; a suíte HTTP local passou 21/21 (zero retries) e o fluxo nativo autenticado foi exercitado; o aceite integral L ainda depende das exceções de transporte nativo e das cláusulas restantes da matriz de testes; S não iniciado**.
 - Baseline inspecionada: `8f3aa74` (`feat/celestial-galaxies`).
 - Entrega deste documento: escopo, decisões recomendadas, sequência de implementação, critérios de aceite e especificações E2E em Gherkin.
 - Nenhuma etapa abaixo autoriza provisionamento, deploy, credenciais, migração destrutiva ou abertura de escrita pública.
@@ -24,6 +24,8 @@ Há dois marcos distintos:
 ## 2. Estado atual verificado
 
 Esta seção registra a baseline anterior à implementação. Para decisões aceitas consulte ADR-0006/0007; para operação local consulte `docs/operations/local-backend.md`. As evidências finais são registradas separadamente, sem transformar cenários ainda não executados em aprovação.
+
+Atualização de implementação local em 2026-08-31: foram acrescentados cenários HTTP executáveis para o contexto novo após restart (B10), retry offline deliberado com rascunho/idempotência (B19), archive e delete revisados com histórico e referências (B32), fallback humano sem WebMCP (B33), viewport móvel de 360 CSS px (B35), paginação com cursor opaco e Back, e refresh de queries entre abas por marcador mínimo de `BroadcastChannel`. A suíte HTTP atual passou **21/21 cenários, zero retries, em 2,4 minutos** (19 desktop e 2 mobile) contra o Worker/D1/R2 reais. O refresh não compartilha conteúdo nem segredos: a aba receptora valida sua própria sessão, invalida apenas suas projeções e conserva o rascunho/base local; troca real de principal limpa o cache privado e a confirmação nativa. A matriz usa os IDs literalmente: B32 é archive/delete, B34 é autoridade nativa sobre conteúdo malicioso/não confiável e B35 é mobile; hardening de Markdown é uma verificação separada. Isso é aceite local escopado, não aprovação integral L/S.
 
 | Área          | Já existe                                                                        | Falta                                                                                                 |
 | ------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -258,6 +260,7 @@ Uma falha durante o batch, incluindo no último arquivo, deve deixar proposta, d
 - Após create/update/transition/merge, um coordenador compartilhado invalida queries afetadas: proposals, proposal, documents, document current, navigation, graph, search, history e counters. UI e WebMCP chamam esse mesmo caminho.
 - Não invalidar/regravar snapshots históricos imutáveis como se fossem documento corrente. Revalidar permissão quando a sessão muda.
 - Outras sessões recebem dados atuais ao focar a aba ou atualizar. Sem promessa de push em tempo real; indicar dados desatualizados quando aplicável.
+- Quando suportado, um `BroadcastChannel` do mesmo vault envia somente `{version, vaultId, kind}` após uma escrita aceita (`publication`, `proposal` ou `session`). A aba receptora verifica sua própria autoridade antes de buscar conteúdo; o transporte é opcional, fechado no descarte e não altera o resultado de uma mutação já confirmada. Foco continua sendo o fallback para navegadores sem o primitivo. Um refresh de conteúdo nunca substitui o rascunho nem sua base; logout/troca de principal cancela a confirmação nativa e remove somente os rascunhos locais do principal anterior.
 - Mostrar estado de requisição; impedir cliques duplicados sem confiar nisso como idempotência de servidor. Não exibir toast de publicado antes do commit.
 - Conflito mantém rascunho e explica base versus versão atual; oferecer comparar e reenviar conscientemente. Nunca substituir a base silenciosamente.
 - Formulário separa body/justificativa e permite os metadados previstos. Exibir ações conforme capabilities, mas o servidor continua sendo a autoridade.
@@ -336,7 +339,7 @@ Cada etapa termina em commit/PR convencional, com evidência proporcional ao ris
 - [x] Implementar portas de leitura usando D1/R2; projection e policy compartilhadas.
 - [x] Leitura por ID/revisão, navegação incremental, busca, cursores, history deep link e grafo limitado.
 - [x] Adaptar UI/GraphSnapshot ao catálogo parcial, sem “sumir” satélites/arquivos por depender de todas as docs.
-- [x] Executar smoke HTTP de exploração com Docs/galáxias equivalentes; manter as 19 regressões visuais/câmera separadas no mock, sem contá-las como E2E HTTP completo de B35.
+- [x] Executar smoke HTTP de exploração com Docs/galáxias equivalentes; manter as 19 regressões visuais/câmera separadas no mock e acrescentar a cobertura HTTP móvel de B35.
 - Saída: B01–B05/B16/B18/B20/B31 e inspeção visual desktop/mobile; nenhuma leitura cai no mock.
 - Commit: `feat(api): serve the vault through persistent read slices`.
 
@@ -362,8 +365,9 @@ Cada etapa termina em commit/PR convencional, com evidência proporcional ao ris
 - [x] Composition HTTP, erros tipados, cancelamento e query invalidation compartilhada.
 - [x] Tool de update/resubmit, dados limitados com continuação, capabilities e confirmação explícita de merge implementadas e exercitadas com sessão nativa autenticada; timeout no transporte durante confirmação e recuperação idempotente documentados no relatório próprio.
 - [x] Expiração/sessão trocada não deixa conteúdo de outro principal no cache.
+- [x] Invalidação local entre abas implementada com marcador mínimo de `BroadcastChannel`, autoridade própria na aba receptora, preservação de rascunho/base e fallback por foco; o cenário de duas abas passou na suíte HTTP 21/21.
 - [x] Preservar paleta, layout, teclado, foco, câmera, tooltips e reduced motion.
-- Saída: B19/B26–B30/B33–B35; merge do agente atualiza Library/Docs/History sem reload.
+- Saída: B19/B26–B30/B32–B35; merge do agente atualiza Library/Docs/History sem reload.
 - Commit: `feat(webmcp): connect governed HTTP workflows to the workspace`.
 
 ### F7 — recuperação, escala e operação local
@@ -441,7 +445,7 @@ Seleção do smoke HTTP comum: `@http and @smoke and not @webmcp-real and not @s
 - [x] Reload, restart, retry e usuários concorrentes não perdem nem sobrescrevem conhecimento silenciosamente nos cenários exercitados.
 - [x] Política, isolamento de caches, limites, restauração e invariantes de segurança testados.
 - [x] Docs/galáxias, idiomas e layout preservados; o modo HTTP não simula sucesso.
-- [x] `pnpm check` (152 testes), HTTP BDD (14/14), mock visual (19/19) e integração storage aprovados; nenhuma falha P0/P1 identificada sem resolução nesse recorte automatizado. Exceções nativas permanecem explícitas.
+- [x] Evidência local atual: HTTP BDD **21/21, zero retries, 2,4 minutos** (19 desktop + 2 mobile), mock visual **19/19, zero retries, 32,5 segundos**, API **51**, web **83**, contratos **13**, mock **13**, tooling **7** e runner local **9**. O HTTP histórico 14/14 é mantido como registro anterior às adições. Nenhuma falha P0/P1 permanece sem resolução neste recorte automatizado; as exceções nativas e as cláusulas restantes da matriz continuam explícitas.
 
 ### Marco S
 
@@ -470,4 +474,4 @@ Referências complementares: [ADRs existentes](../decisions), [arquitetura atual
 
 ## 16. Evidências da implementação local
 
-Os registros anteriores são históricos. A implementação atual e suas fronteiras são descritas no [relatório de entrega](../operations/backend-delivery.md), [matriz HTTP](../operations/backend-verification.md), [evidência nativa](../operations/native-webmcp-evidence.md), [contrato HTTP](../operations/api-contract.md) e [runbook local](../operations/local-backend.md). Nenhum checkbox transforma as cláusulas ainda não executadas da matriz B01–B39 em aprovação integral L. B40–B42 permanecem fora da entrega local.
+Os registros anteriores são históricos. A implementação atual e suas fronteiras são descritas no [relatório de entrega](../operations/backend-delivery.md), [matriz HTTP](../operations/backend-verification.md), [evidência do release local](../operations/local-release-evidence.md), [evidência nativa](../operations/native-webmcp-evidence.md), [contrato HTTP](../operations/api-contract.md) e [runbook local](../operations/local-backend.md). Nenhum checkbox transforma as cláusulas ainda não executadas da matriz B01–B39 em aprovação integral L. B40–B42 permanecem fora da entrega local.

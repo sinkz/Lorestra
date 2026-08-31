@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   QueryCache,
   QueryClient,
@@ -12,7 +12,11 @@ import { createAppRouter } from './router'
 import { createI18n } from '../shared/i18n'
 import { ClientProvider } from '../shared/api/client'
 import { createAppClients } from '../shared/api/composition'
-import { coordinateClients } from '../shared/api/coordinator'
+import { coordinateClients, invalidateClientQueries } from '../shared/api/coordinator'
+import {
+  createCrossTabInvalidationChannel,
+  type CrossTabInvalidation,
+} from '../shared/api/cross-tab'
 import { SessionContext, sessionScope } from '../shared/api/session'
 import { ApiError } from '../shared/api/errors'
 import { ErrorState, LoadingState } from '../shared/ui'
@@ -30,6 +34,16 @@ const i18n = createI18n()
 const clientsPromise = createAppClients()
 const router = createAppRouter()
 
+function clearVaultDrafts(vaultId: string, principalId: string | undefined) {
+  try {
+    const prefix = `lorestra-draft:${vaultId}:${principalId ?? 'visitor'}:`
+    for (const key of Object.keys(localStorage))
+      if (key.startsWith(prefix)) localStorage.removeItem(key)
+  } catch {
+    /* Device storage may be unavailable. No session token is stored here. */
+  }
+}
+
 function SessionGate() {
   const clients = useQuery({
     queryKey: ['clients'],
@@ -44,6 +58,7 @@ function SessionGate() {
     refetchInterval: 60_000,
   })
   const refetchSession = session.refetch
+  const refreshSession = useCallback(() => void refetchSession(), [refetchSession])
   useEffect(() => {
     if (!session.data?.expiresAt) return
     const timeout = window.setTimeout(
@@ -68,7 +83,7 @@ function SessionGate() {
       key={sessionScope(session.data)}
       session={session.data}
       clients={clients.data}
-      refresh={() => void session.refetch()}
+      refresh={refreshSession}
     />
   )
 }
@@ -113,10 +128,78 @@ function WorkspaceSession({
         },
       }),
   )
-  const [coordinated] = useState(() =>
-    coordinateClients(clients, queryClient, () => sessionRef.current, refresh),
-  )
   const [mergeConfirmation] = useState(createMergeConfirmationController)
+  // Keep the coordinator side-effect free during StrictMode's discarded
+  // render. The real BroadcastChannel is created and closed by the effect.
+  const crossTabRef = useRef<ReturnType<
+    typeof createCrossTabInvalidationChannel
+  > | null>(null)
+  const crossTabBridge = useRef({
+    publish: (kind: CrossTabInvalidation['kind']) => crossTabRef.current?.publish(kind),
+  }).current
+  const [coordinated] = useState(() =>
+    coordinateClients(clients, queryClient, () => sessionRef.current, refresh, {
+      crossTab: crossTabBridge,
+    }),
+  )
+  useEffect(() => {
+    let active = true
+    const clearSession = (clearDraft: boolean) => {
+      // A principal change invalidates private cache, the old principal's
+      // local drafts, and any native confirmation for the old session.
+      mergeConfirmation.cancel()
+      if (clearDraft)
+        clearVaultDrafts(session.vaultId, sessionRef.current.principal?.id)
+      void queryClient
+        .cancelQueries()
+        .catch(() => undefined)
+        .then(() => {
+          if (!active) return
+          queryClient.clear()
+          refresh()
+        })
+    }
+    const handleSignal = async (signal: CrossTabInvalidation) => {
+      if (signal.kind === 'session') {
+        mergeConfirmation.cancel()
+        let principalChanged = false
+        try {
+          const current = await clients.session?.getSession()
+          principalChanged =
+            !current || sessionScope(current) !== sessionScope(sessionRef.current)
+        } catch {
+          // The cache is still cleared below, while the session query retries;
+          // preserve the local draft until a changed principal is confirmed.
+        }
+        if (active) clearSession(principalChanged)
+        return
+      }
+      // Cookies can change in another tab before this tab's SessionGate has
+      // observed it. Verify our authority before refetching private queries.
+      try {
+        const current = await clients.session?.getSession()
+        if (!active) return
+        if (!current || sessionScope(current) !== sessionScope(sessionRef.current)) {
+          clearSession(true)
+          return
+        }
+        await invalidateClientQueries(queryClient, signal.kind)
+      } catch {
+        // Keep the current snapshot/draft and let the session query retry; an
+        // authority check that cannot complete must not trigger blind refetch.
+        if (active) refresh()
+      }
+    }
+    const channel = createCrossTabInvalidationChannel(session.vaultId, (signal) => {
+      void handleSignal(signal)
+    })
+    crossTabRef.current = channel
+    return () => {
+      active = false
+      if (crossTabRef.current === channel) crossTabRef.current = null
+      channel.close()
+    }
+  }, [clients, mergeConfirmation, queryClient, refresh, session.vaultId])
   useEffect(() => {
     const controller = new AbortController()
     const registration = registerLorestraWebMcpTools(
@@ -140,13 +223,8 @@ function WorkspaceSession({
     })
     await queryClient.cancelQueries()
     queryClient.clear()
-    try {
-      const prefix = `lorestra-draft:${session.vaultId}:${session.principal?.id ?? 'visitor'}:`
-      for (const key of Object.keys(localStorage))
-        if (key.startsWith(prefix)) localStorage.removeItem(key)
-    } catch {
-      /* Device storage may be unavailable. No session token is stored here. */
-    }
+    clearVaultDrafts(session.vaultId, session.principal?.id)
+    crossTabBridge.publish('session')
     refresh()
   }
   const login = async (token: string) => {
@@ -158,6 +236,7 @@ function WorkspaceSession({
         csrfToken: session.csrfToken ?? undefined,
       },
     )
+    crossTabBridge.publish('session')
     refresh()
   }
   return (

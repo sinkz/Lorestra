@@ -1,5 +1,14 @@
 # Local backend operations
 
+The durable `local:start` command is a signal-owning supervisor. It keeps the
+private Miniflare Worker and Vite preview in an isolated child and sends a
+cooperative IPC shutdown on Ctrl+C/SIGTERM, allowing the operator lock and
+state to close cleanly. The real-runtime restart regression passed 1/1 across
+two start/stop cycles (one restart), with full document-body/version
+preservation, cooperative Windows IPC shutdown and no retained operator lock.
+Windows physical Ctrl+C remains
+unvalidated in this environment.
+
 Lorestra's local backend runs the real Worker application against local D1 and R2 using Miniflare. These commands do not create Cloudflare resources, deploy a Worker, or authenticate against a remote account.
 
 The shared Worker and the local operator are different entry points. Local identities are synthetic development credentials; they are not proof that shared authentication or a production identity provider has been configured.
@@ -15,6 +24,18 @@ node scripts/backend-local.mjs dev
 ```
 
 The first command validates the canonical Markdown without changing storage. `init` applies migrations, explicitly imports the seed, and writes a local maintainer credential file. `dev` opens the existing store without reimporting Markdown.
+
+For the reproducible built release, initialize once and then let one Node process own both the Vite production preview and the local Worker:
+
+```sh
+pnpm backend:init
+pnpm local:build
+pnpm local:start
+```
+
+Open `http://127.0.0.1:4173` and use only the `token` from `.lorestra/state/local-session.json` in the sign-in dialog. `local:start` proxies `/api` to the Worker on an ephemeral loopback port, holds the operator lock, and closes Vite, Miniflare and the lock on Ctrl+C. It requires the `seed_id` written by explicit `backend:init`; it never seeds or resets state on startup. Re-run `pnpm local:start` to restart with the same D1/R2 state. Rebuild with `pnpm local:build` after source changes.
+
+The focused release-runner tests are `pnpm test:local`; the current suite passes 9/9 (the initial six-case run preceded the preview/lifecycle additions). They cover loopback/host allowlists, explicit initialization and build preflights, strict occupied-port handling, preview serving/close and the proxy contract. The separate real-runtime lifecycle regression passes 1/1 across two start/stop cycles (one restart). A successful focused test run is not Docker or native-browser evidence.
 
 The defaults are:
 

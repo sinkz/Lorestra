@@ -295,6 +295,25 @@ export async function prepareChanges(
       'A relation references an unavailable document.',
       422,
     )
+  const deletionRelationIds = [
+    ...new Set(
+      changes
+        .filter((change) => change.changeType === 'deleted')
+        .flatMap((change) => {
+          const documentId = change.target.documentId
+          return documentId ? (before.get(documentId)?.snapshot.relations ?? []) : []
+        }),
+    ),
+  ]
+  const deletedRelationIds = new Set<string>()
+  if (deletionRelationIds.length) {
+    const rows = await env.DB.prepare(
+      'SELECT id FROM documents WHERE deleted=1 AND id IN (SELECT value FROM json_each(?))',
+    )
+      .bind(JSON.stringify(deletionRelationIds))
+      .all<{ id: string }>()
+    for (const row of rows.results) deletedRelationIds.add(row.id)
+  }
   const aliases = await env.DB.prepare(
     'SELECT locale,slug,document_id FROM aliases WHERE slug IN (SELECT value FROM json_each(?))',
   )
@@ -360,10 +379,22 @@ export async function prepareChanges(
     const beforeMetadata = current
       ? { ...metadataOf(current.snapshot), folderId: current.folderId }
       : null
+    const projectedBeforeMetadata =
+      current && beforeMetadata
+        ? {
+            ...beforeMetadata,
+            // Member document reads omit tombstoned relation targets. Accept
+            // that exact projection for deletion, but never an active relation edit.
+            relations: current.snapshot.relations.filter(
+              (id) => !deletedRelationIds.has(id),
+            ),
+          }
+        : null
     if (
       change.changeType === 'deleted' &&
       current &&
-      (canonicalJson(change.metadata) !== canonicalJson(beforeMetadata) ||
+      ((canonicalJson(change.metadata) !== canonicalJson(beforeMetadata) &&
+        canonicalJson(change.metadata) !== canonicalJson(projectedBeforeMetadata)) ||
         change.target.slug !== current.snapshot.slug ||
         change.target.title !== current.snapshot.title)
     )

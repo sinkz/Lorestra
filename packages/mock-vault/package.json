@@ -6,7 +6,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --maxWorkers=1 --no-file-parallelism",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "exports": {

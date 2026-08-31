@@ -28,7 +28,7 @@ A promessa é simples: a próxima pessoa deve agir com menos retrabalho e mais c
 
 ## Leia primeiro, publique com intenção
 
-A experiência pública é somente leitura. Um fluxo autenticado futuro permitirá que uma pessoa ou um agente proponha uma mudança, peça revisão e faça merge somente depois de uma decisão explícita. Uma proposta não é um documento publicado. Aprovação não é publicação. O merge é o evento que cria uma nova versão imutável.
+A experiência pública é somente leitura. Na aplicação local durável, uma sessão autenticada do navegador permite que uma pessoa ou agente proponha uma mudança, peça revisão e faça merge somente depois da confirmação explícita da proposta e da versão exatas. Uma proposta não é um documento publicado. Aprovação não é publicação. O merge é o evento que cria uma nova versão imutável. Identidade compartilhada e deploy continuam sendo trabalho futuro.
 
 Essa separação oferece duas propriedades úteis:
 

@@ -16,6 +16,10 @@ After the user authorized synthetic local sessions, actual native tools created 
 
 The test exposed blocking `window.confirm` behavior, replaced by an asynchronous accessible modal. Cancel/Escape and stale-confirmation readback showed no publication. However, the native transport still timed out while awaiting human input: original cancellation/conflict payloads were not captured. After explicit confirmation, identical-payload, same-key retries recovered the persisted successful results without duplicate publication. This limitation remains open; do not call the complete native B29–B30 gate passed.
 
+## Two-agent concurrency follow-up
+
+An additional [two-agent native-tab experiment](dual-webmcp-tabs.md) later recorded overlapping WebMCP updates from two agents on the same proposal: one succeeded and the other returned `409 proposal_version_conflict`. Explicit reconciliation published both contributions once. Both tabs used the same synthetic principal, so this does not establish user/session isolation. The competing stale-document merge retained its unmerged state but still lacked the original response because of the confirmation transport timeout.
+
 ## Not certified by this evidence
 
 The malicious-document authority scenario, every native error/cancellation response, cross-machine collaboration and shared staging remain uncertified. The ordinary-browser fallback, HTTP BDD and controller/tool unit tests are separate checks. Only operator-issued synthetic sessions were used; no user account or Cloudflare credential was accessed. Never publish cookies, token files or authenticated traces.

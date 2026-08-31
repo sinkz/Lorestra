@@ -1,11 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { ProposalEditorDialog } from '../features/proposals/ProposalEditorDialog'
+import { useSession } from '../shared/api/session'
+import { errorMessageKey } from '../shared/api/errors'
+import type { DurableProposalTransitionInput } from '@lorestra/contracts'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { useAppClients } from '../shared/api/client'
-import { useLocale, useNavigationQuery, useProposalQuery } from '../shared/api/hooks'
-import type { ProposalFile, ProposalStatus } from '../shared/model/types'
+import { useLocale, useProposalQuery } from '../shared/api/hooks'
+import type { ProposalFile, Proposal } from '../shared/model/types'
 import {
   Button,
   EmptyState,
@@ -25,38 +29,56 @@ export function ProposalDetailPage() {
   const locale = useLocale()
   const { proposalId } = useParams<{ proposalId: string }>()
   const clients = useAppClients()
-  const queryClient = useQueryClient()
-  const navigation = useNavigationQuery()
+  const { session } = useSession()
+  const [editing, setEditing] = useState(false)
+  const [mergeSnapshot, setMergeSnapshot] = useState<Proposal | null>(null)
+  const [reviewVersion, setReviewVersion] = useState<number | null>(null)
+  const [fileIndex, setFileIndex] = useState(0)
   const proposalQuery = useProposalQuery(proposalId)
   const [changesOpen, setChangesOpen] = useState(false)
   const proposal = proposalQuery.data
   const transition = useMutation({
-    mutationFn: (input: { status: Exclude<ProposalStatus, 'open'>; reason?: string }) =>
-      clients.proposals.transition({ proposalId: proposalId ?? '', ...input, locale }),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['proposal', proposalId] }),
-        queryClient.invalidateQueries({ queryKey: ['proposals'] }),
-        queryClient.invalidateQueries({ queryKey: ['history'] }),
-        queryClient.invalidateQueries({ queryKey: ['navigation', locale] }),
-        queryClient.invalidateQueries({ queryKey: ['document'] }),
-        queryClient.invalidateQueries({ queryKey: ['graph'] }),
-        queryClient.invalidateQueries({ queryKey: ['search'] }),
-      ])
+    mutationFn: (input: DurableProposalTransitionInput) =>
+      clients.proposals.transition(input),
+    onSuccess: () => {
       setChangesOpen(false)
+      setMergeSnapshot(null)
     },
   })
-
-  const fileDocuments = useMemo(() => {
-    if (!proposal || !navigation.data) return new Map<string, string>()
-    return new Map(
-      navigation.data.documents.map((document) => [document.id, document.slug]),
-    )
-  }, [navigation.data, proposal])
+  const changeStatus = (
+    status: DurableProposalTransitionInput['status'],
+    reason?: string,
+    snapshot = proposal,
+  ) => {
+    if (!snapshot?.proposalVersion) return
+    transition.mutate({
+      proposalId: snapshot.id,
+      expectedProposalVersion:
+        status === 'changes_requested'
+          ? (reviewVersion ?? snapshot.proposalVersion)
+          : snapshot.proposalVersion,
+      status,
+      reason,
+      ...(status === 'merged' && snapshot.contentHash
+        ? {
+            confirmation: {
+              proposalId: snapshot.id,
+              proposalVersion: snapshot.proposalVersion,
+              contentHash: snapshot.contentHash,
+            },
+          }
+        : {}),
+    })
+  }
 
   if (proposalQuery.isLoading) return <LoadingState />
   if (proposalQuery.isError)
-    return <ErrorState onRetry={() => void proposalQuery.refetch()} />
+    return (
+      <ErrorState
+        error={proposalQuery.error}
+        onRetry={() => void proposalQuery.refetch()}
+      />
+    )
   if (!proposal)
     return (
       <div className="page-surface">
@@ -73,8 +95,23 @@ export function ProposalDetailPage() {
 
   const passed = proposal.checks.filter((check) => check.status === 'passed').length
   const canApprove =
-    proposal.status === 'open' || proposal.status === 'changes-requested'
-  const canMerge = proposal.status === 'approved'
+    session.capabilities.reviewProposal &&
+    !session.readOnly.enabled &&
+    Boolean(proposal.proposalVersion) &&
+    (proposal.status === 'open' || proposal.status === 'changes-requested')
+  const canMerge =
+    session.capabilities.mergeProposal &&
+    !session.readOnly.enabled &&
+    proposal.status === 'approved' &&
+    Boolean(proposal.proposalVersion && proposal.contentHash)
+  const canEdit =
+    !session.readOnly.enabled &&
+    proposal.status !== 'merged' &&
+    Boolean(proposal.proposalVersion) &&
+    proposal.files.every((file) => Boolean(file.change)) &&
+    (session.capabilities.editAnyProposal ||
+      (session.capabilities.editOwnProposal &&
+        proposal.authorId === session.principal?.id))
 
   return (
     <section className="page-surface" aria-labelledby="page-heading">
@@ -100,6 +137,11 @@ export function ProposalDetailPage() {
             </span>
             <span>·</span>
             <span>{proposal.author}</span>
+            {proposal.proposalVersion ? (
+              <span>
+                {t('editor.proposalVersion', { version: proposal.proposalVersion })}
+              </span>
+            ) : null}
             <span>·</span>
             <span>{formatDate(proposal.updatedAt, locale)}</span>
           </div>
@@ -112,7 +154,9 @@ export function ProposalDetailPage() {
             <div className="file-chip-list">
               {proposal.files.length ? (
                 proposal.files.map((file, index) => {
-                  const displayPath = file.path ?? t('proposals.pathUnavailable')
+                  const displayPath =
+                    file.path ??
+                    (file.slug ? `${file.slug}.md` : t('proposals.pathUnavailable'))
                   const fileLabel = (
                     <>
                       <Icon name="file" />
@@ -123,10 +167,11 @@ export function ProposalDetailPage() {
                     </>
                   )
                   const key = `${proposal.id}-file-${index}`
-                  return file.documentId && fileDocuments.get(file.documentId) ? (
+                  return file.slug &&
+                    (file.documentId || proposal.status === 'merged') ? (
                     <Link
                       className="file-chip"
-                      to={`/documents/${encodeURIComponent(fileDocuments.get(file.documentId) ?? '')}?tab=preview`}
+                      to={`/documents/${encodeURIComponent(file.slug ?? '')}?tab=preview`}
                       key={key}
                     >
                       {fileLabel}
@@ -143,9 +188,26 @@ export function ProposalDetailPage() {
                 </span>
               )}
             </div>
-            {proposal.files.map((file, index) => (
-              <DiffFile file={file} key={`${proposal.id}-diff-${index}`} />
-            ))}
+            {proposal.files.length > 1 ? (
+              <label className="form-field">
+                <span>{t('proposals.affectedFiles')}</span>
+                <select
+                  value={fileIndex}
+                  onChange={(event) => setFileIndex(Number(event.target.value))}
+                >
+                  {proposal.files.map((file, index) => (
+                    <option key={index} value={index}>
+                      {index + 1}. {file.path ?? file.slug}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {proposal.files[Math.min(fileIndex, proposal.files.length - 1)] ? (
+              <DiffFile
+                file={proposal.files[Math.min(fileIndex, proposal.files.length - 1)]}
+              />
+            ) : null}
           </section>
           <section className="proposal-section">
             <h3>{t('proposals.checks', { passed, total: proposal.checks.length })}</h3>
@@ -169,11 +231,20 @@ export function ProposalDetailPage() {
             </ul>
           </section>
           <div className="proposal-actions" aria-label={t('proposals.detailLabel')}>
+            {canEdit ? (
+              <Button
+                variant="secondary"
+                disabled={transition.isPending}
+                onClick={() => setEditing(true)}
+              >
+                {t('editor.editProposal')}
+              </Button>
+            ) : null}
             {canApprove ? (
               <Button
                 variant="primary"
                 disabled={transition.isPending}
-                onClick={() => transition.mutate({ status: 'approved' })}
+                onClick={() => changeStatus('approved')}
               >
                 {t('proposals.approve')}
               </Button>
@@ -182,7 +253,10 @@ export function ProposalDetailPage() {
               <Button
                 variant="danger"
                 disabled={transition.isPending}
-                onClick={() => setChangesOpen(true)}
+                onClick={() => {
+                  setReviewVersion(proposal.proposalVersion ?? null)
+                  setChangesOpen(true)
+                }}
               >
                 {t('proposals.requestChanges')}
               </Button>
@@ -191,7 +265,7 @@ export function ProposalDetailPage() {
               <Button
                 variant="primary"
                 disabled={transition.isPending}
-                onClick={() => transition.mutate({ status: 'merged' })}
+                onClick={() => setMergeSnapshot(proposal)}
               >
                 {t('proposals.merge')}
               </Button>
@@ -204,19 +278,80 @@ export function ProposalDetailPage() {
             ) : null}
             {transition.isError ? (
               <span className="field-error" role="alert">
-                {t('common.errorTitle')}
+                {t(errorMessageKey(transition.error))}
               </span>
             ) : null}
           </div>
         </div>
       </div>
+      <ProposalEditorDialog
+        open={editing}
+        proposal={proposal}
+        onClose={() => setEditing(false)}
+        onCreated={() => void proposalQuery.refetch()}
+      />
+      <ModalDialog
+        className="memory-dialog"
+        open={Boolean(mergeSnapshot)}
+        aria-labelledby="confirm-merge-title"
+        onRequestClose={() => {
+          if (!transition.isPending) setMergeSnapshot(null)
+        }}
+      >
+        <div className="memory-dialog-card">
+          <h2 id="confirm-merge-title">{t('editor.confirmMerge')}</h2>
+          <p>
+            {t('editor.mergeExplanation', {
+              title: mergeSnapshot?.title,
+              version: mergeSnapshot?.proposalVersion,
+            })}
+          </p>
+          <dl className="merge-confirmation-target">
+            <div>
+              <dt>{t('editor.proposalId')}</dt>
+              <dd>
+                <code>{mergeSnapshot?.id}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>{t('document.version')}</dt>
+              <dd>v{mergeSnapshot?.proposalVersion}</dd>
+            </div>
+            <div>
+              <dt>{t('editor.contentHash')}</dt>
+              <dd>
+                <code>{mergeSnapshot?.contentHash}</code>
+              </dd>
+            </div>
+          </dl>
+          <div className="dialog-actions">
+            <Button
+              variant="secondary"
+              disabled={transition.isPending}
+              onClick={() => setMergeSnapshot(null)}
+            >
+              {t('document.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              disabled={transition.isPending}
+              onClick={() => changeStatus('merged', undefined, mergeSnapshot)}
+            >
+              {t('editor.confirmMerge')}
+            </Button>
+          </div>
+          {transition.isError ? (
+            <p className="field-error" role="alert">
+              {t(errorMessageKey(transition.error))}
+            </p>
+          ) : null}
+        </div>
+      </ModalDialog>
       <ChangesDialog
         open={changesOpen}
         isSubmitting={transition.isPending}
         onClose={() => setChangesOpen(false)}
-        onSubmit={(reason) =>
-          transition.mutate({ status: 'changes-requested', reason })
-        }
+        onSubmit={(reason) => changeStatus('changes_requested', reason)}
       />
     </section>
   )
@@ -224,7 +359,8 @@ export function ProposalDetailPage() {
 
 function DiffFile({ file }: { file: ProposalFile }) {
   const { t } = useTranslation()
-  const displayPath = file.path ?? t('proposals.pathUnavailable')
+  const displayPath =
+    file.path ?? (file.slug ? `${file.slug}.md` : t('proposals.pathUnavailable'))
   return (
     <div className="diff-file">
       <div className="diff-file-header">
@@ -239,6 +375,48 @@ function DiffFile({ file }: { file: ProposalFile }) {
         </span>
       </div>
       <div className="diff-lines">
+        {file.change ? (
+          <details className="proposal-metadata-diff">
+            <summary>{t('editor.metadata')}</summary>
+            <dl>
+              <div>
+                <dt>{t('editor.documentTitle')}</dt>
+                <dd>{file.change.target.title}</dd>
+              </div>
+              <div>
+                <dt>Slug</dt>
+                <dd>{file.change.target.slug}</dd>
+              </div>
+              {Object.entries(file.change.metadata).map(([key, value]) => {
+                const previous =
+                  file.beforeMetadata?.[
+                    key as keyof NonNullable<typeof file.beforeMetadata>
+                  ]
+                const changed =
+                  previous !== undefined &&
+                  JSON.stringify(previous) !== JSON.stringify(value)
+                return (
+                  <div key={key}>
+                    <dt>{t(`editor.metadataFields.${key}`, { defaultValue: key })}</dt>
+                    <dd>
+                      {changed ? (
+                        <>
+                          <del>
+                            {Array.isArray(previous)
+                              ? previous.join(', ')
+                              : String(previous)}
+                          </del>{' '}
+                          →{' '}
+                        </>
+                      ) : null}
+                      {Array.isArray(value) ? value.join(', ') : String(value)}
+                    </dd>
+                  </div>
+                )
+              })}
+            </dl>
+          </details>
+        ) : null}
         {file.diff.length ? (
           file.diff.map((line, index) => (
             <div className={`diff-line ${line.type}`} key={`${displayPath}-${index}`}>

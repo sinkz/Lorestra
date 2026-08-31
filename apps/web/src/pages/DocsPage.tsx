@@ -1,8 +1,12 @@
 import { useEffect, useMemo } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 
-import { useDocumentQuery, useNavigationQuery } from '../shared/api/hooks'
+import {
+  useDocumentQuery,
+  useNavigationQuery,
+  useDocumentsQuery,
+} from '../shared/api/hooks'
 import { useShellStore } from '../shared/store/useShellStore'
 import type { Locale } from '../shared/model/types'
 import {
@@ -12,6 +16,7 @@ import {
   LoadingState,
   MarkdownContent,
   PageHeading,
+  Pagination,
 } from '../shared/ui'
 
 export function DocsPage() {
@@ -22,6 +27,14 @@ export function DocsPage() {
   const setLocale = useShellStore((state) => state.setLocale)
   const navigation = useNavigationQuery()
   const documentQuery = useDocumentQuery(slug)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const cursor = searchParams.get('cursor') ?? undefined
+  const docsFolder = navigation.data?.folders.find((folder) => folder.name === 'Docs')
+  const listing = useDocumentsQuery({
+    folderId: docsFolder?.id ?? `folder.docs.${locale.toLowerCase()}`,
+    cursor,
+  })
+  const documents = listing.data?.items ?? []
   const documentSlugs = useMemo(
     () =>
       (navigation.data?.documents ?? [])
@@ -35,24 +48,15 @@ export function DocsPage() {
     if (i18n.language !== locale) void i18n.changeLanguage(locale)
   }, [i18n, locale, setLocale])
 
-  const documents = useMemo(
-    () =>
-      (navigation.data?.documents ?? []).filter(
-        (document) =>
-          document.locale === locale &&
-          (document.folderPath === 'Docs' || document.folderPath.startsWith('Docs/')),
-      ),
-    [locale, navigation.data?.documents],
-  )
-
-  if (navigation.isLoading || (slug && documentQuery.isLoading)) {
+  if (navigation.isLoading || listing.isLoading || (slug && documentQuery.isLoading)) {
     return <LoadingState />
   }
-  if (navigation.isError || documentQuery.isError) {
+  if (navigation.isError || documentQuery.isError || listing.isError) {
     return (
       <ErrorState
         onRetry={() => {
           void navigation.refetch()
+          void listing.refetch()
           if (slug) void documentQuery.refetch()
         }}
       />
@@ -97,6 +101,15 @@ export function DocsPage() {
                 </Link>
               ))}
             </nav>
+            {listing.data ? (
+              <Pagination
+                pageInfo={listing.data.pageInfo}
+                pageSize={documents.length}
+                cursor={cursor}
+                onNext={(next) => setSearchParams(next ? { cursor: next } : {})}
+                onPrevious={(next) => setSearchParams(next ? { cursor: next } : {})}
+              />
+            ) : null}
           </aside>
           <article className="docs-reader-content">
             <span className="eyebrow">{document.folderPath}</span>
@@ -104,7 +117,11 @@ export function DocsPage() {
               {document.title}
             </h1>
             <p className="docs-reader-lead">{document.summary}</p>
-            <MarkdownContent source={document.body} documentSlugs={documentSlugs} />
+            <MarkdownContent
+              source={document.body}
+              documentSlugs={documentSlugs}
+              resolvedLinks={document.resolvedLinks}
+            />
           </article>
         </div>
       </section>
@@ -146,6 +163,15 @@ export function DocsPage() {
         ) : (
           <EmptyState title={t('docs.noDoc')} />
         )}
+        {listing.data ? (
+          <Pagination
+            pageInfo={listing.data.pageInfo}
+            pageSize={documents.length}
+            cursor={cursor}
+            onNext={(next) => setSearchParams(next ? { cursor: next } : {})}
+            onPrevious={(next) => setSearchParams(next ? { cursor: next } : {})}
+          />
+        ) : null}
       </div>
     </section>
   )

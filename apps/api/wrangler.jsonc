@@ -4,4 +4,11 @@
   "main": "src/runtime/worker.ts",
   "compatibility_date": "2026-08-28",
   "workers_dev": true,
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    { "binding": "DB", "database_name": "lorestra", "migrations_dir": "migrations" },
+  ],
+  "r2_buckets": [{ "binding": "VAULT", "bucket_name": "lorestra-vault" }],
+  "vars": { "LORESTRA_ENV": "shared", "LORESTRA_ORIGIN": "http://127.0.0.1:5173" },
+  "observability": { "enabled": true },
 }

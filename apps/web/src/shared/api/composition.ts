@@ -1,44 +1,53 @@
-import { createMockClients } from '@lorestra/mock-vault'
-
+import type { SessionResponse } from '@lorestra/contracts'
 import type { AppClients } from '../model/types'
-import {
-  createKnowledgeAdapter,
-  createProposalAdapter,
-  type ProposalFileMetadata,
-} from './client'
+import { createKnowledgeAdapter, createProposalAdapter } from './client'
 import { createHttpClients } from './http-clients'
 
-/**
- * The sole adapter switch. Pages, features, query hooks, and UI components
- * consume the stable application clients and never import fixtures.
- */
-export function createAppClients(): AppClients {
-  const contractClients =
-    import.meta.env.VITE_DATA_ADAPTER === 'http'
-      ? createHttpClients(import.meta.env.VITE_LORESTRA_API_URL || '/api')
-      : createMockClients()
-  const knowledge = createKnowledgeAdapter(contractClients.knowledgeClient)
-  const isMock = import.meta.env.VITE_DATA_ADAPTER !== 'http'
-
-  return {
-    knowledge,
-    proposals: createProposalAdapter(contractClients.proposalClient, {
-      resolveDocument: async (documentId, locale = 'en') => {
-        const navigation = await knowledge.getNavigation({ locale })
-        const document = navigation.documents.find((item) => item.id === documentId)
-        return document ? { slug: document.slug, title: document.title } : undefined
+/** Only this build-time branch can load demonstration fixtures. HTTP never falls back. */
+export async function createAppClients(): Promise<AppClients> {
+  if (
+    import.meta.env.VITE_DATA_ADAPTER === 'mock' ||
+    (import.meta.env.DEV && !import.meta.env.VITE_DATA_ADAPTER)
+  ) {
+    const { createMockClients } = await import('@lorestra/mock-vault')
+    const mock = createMockClients()
+    const session: SessionResponse = {
+      vaultId: 'lorestra-vault',
+      principal: { id: 'local-human', name: 'Local demo', role: 'maintainer' },
+      capabilities: {
+        readPublic: true,
+        readInternal: true,
+        readProposals: true,
+        createProposal: true,
+        editOwnProposal: true,
+        editAnyProposal: true,
+        reviewProposal: true,
+        mergeProposal: true,
+        manageVault: true,
       },
-      resolveFiles: isMock
-        ? (proposalId) => {
-            const mock = contractClients as ReturnType<typeof createMockClients>
-            return mock.store
-              .findProposal(proposalId)
-              ?.files.map((file): ProposalFileMetadata => ({
-                path: file.path,
-                changeType: file.changeType,
-              }))
-          }
-        : undefined,
-    }),
+      mode: 'mock',
+      csrfToken: null,
+      expiresAt: null,
+      readOnly: { enabled: false, reason: null },
+      limits: {
+        maxDocumentBytes: 65536,
+        maxProposalBytes: 262144,
+        maxFilesPerProposal: 20,
+        maxOpenProposals: 100,
+        maxRequestsPerMinute: 240,
+        maxWritesPerMinute: 60,
+      },
+    }
+    return {
+      knowledge: createKnowledgeAdapter(mock.knowledgeClient),
+      proposals: createProposalAdapter(mock.proposalClient),
+      session: { getSession: async () => session, logout: async () => undefined },
+    }
+  }
+  const http = createHttpClients(import.meta.env.VITE_LORESTRA_API_URL || '/api')
+  return {
+    knowledge: createKnowledgeAdapter(http.knowledgeClient),
+    proposals: createProposalAdapter(http.proposalClient),
+    session: http.sessionClient,
   }
 }

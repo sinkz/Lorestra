@@ -1,10 +1,9 @@
-import { useMemo } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import {
-  useHistoryQuery,
+  useHistoryEventQuery,
+  useDocumentByIdQuery,
   useLocale,
-  useNavigationQuery,
   useProposalQuery,
 } from '../shared/api/hooks'
 import {
@@ -22,36 +21,30 @@ export function HistoryDetailPage() {
   const { eventId } = useParams<{ eventId: string }>()
   const [params] = useSearchParams()
   const cursor = params.get('cursor') ?? undefined
-  const history = useHistoryQuery(undefined, cursor)
+  const history = useHistoryEventQuery(eventId)
   const historyHref = cursor
     ? `/history?cursor=${encodeURIComponent(cursor)}`
     : '/history'
-  const navigation = useNavigationQuery()
-  const event = useMemo(
-    () => history.data?.events.find((item) => item.id === eventId),
-    [eventId, history.data?.events],
+  const event = history.data
+  const documentQuery = useDocumentByIdQuery(
+    event?.documentId,
+    event?.revisionId ? Number(event.revisionId.replace(/^v/, '')) : undefined,
   )
-  const document = useMemo(
-    () =>
-      navigation.data?.documents.find(
-        (item) => item.id === event?.documentId || item.slug === event?.documentSlug,
-      ),
-    [event?.documentId, event?.documentSlug, navigation.data?.documents],
-  )
+  const document = documentQuery.data
   const proposal = useProposalQuery(event?.proposalId)
 
   if (
     history.isLoading ||
-    navigation.isLoading ||
+    documentQuery.isLoading ||
     (event?.proposalId && proposal.isLoading)
   )
     return <LoadingState />
-  if (history.isError || navigation.isError || proposal.isError)
+  if (history.isError || documentQuery.isError || proposal.isError)
     return (
       <ErrorState
         onRetry={() => {
           void history.refetch()
-          void navigation.refetch()
+          void documentQuery.refetch()
           void proposal.refetch()
         }}
       />

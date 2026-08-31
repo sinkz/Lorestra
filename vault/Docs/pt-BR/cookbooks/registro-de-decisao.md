@@ -2,7 +2,7 @@
 id: lorestra.docs.cookbook-decision.pt-br
 slug: cookbook-registro-de-decisao
 locale: pt-BR
-title: Cookbook: registro de decisão
+title: 'Cookbook: registro de decisão'
 description: Torne uma decisão importante fácil de revisitar sem reabrir todo o debate.
 folderId: folder.docs.pt-br
 visibility: public
@@ -12,7 +12,8 @@ createdAt: 2026-08-02T09:00:00.000Z
 updatedAt: 2026-08-21T09:00:00.000Z
 author: Produto e engenharia
 tags: [cookbook, decisão, adr]
-relatedDocumentIds: [lorestra.product.north-star, lorestra.engineering.contracts-adapters]
+relatedDocumentIds:
+  [lorestra.product.north-star, lorestra.engineering.contracts-adapters]
 nav:
   visible: true
   parentId: folder.docs.pt-br

@@ -166,6 +166,24 @@ export function LanguageSwitcher() {
         currentNavigation,
         targetNavigation,
       )
+      if (location.pathname.startsWith('/docs/')) nextRoute = `/docs/${value}`
+      if (currentNavigation.partial || targetNavigation.partial) {
+        if (location.pathname.startsWith('/documents/')) {
+          const slug = decodeURIComponent(
+            location.pathname.slice('/documents/'.length).split('/')[0],
+          )
+          const translated = await clients.knowledge.getDocument({
+            slug,
+            locale: value,
+          })
+          nextRoute = translated
+            ? `/documents/${encodeURIComponent(translated.slug)}?tab=preview`
+            : '/library'
+        }
+        const nextParams = new URLSearchParams(nextRoute.split('?')[1] ?? '')
+        nextParams.delete('cursor')
+        nextRoute = nextRoute.split('?')[0] + (nextParams.size ? `?${nextParams}` : '')
+      }
     } catch {
       // Keep the user on a known safe route if the target navigation is unavailable.
     }

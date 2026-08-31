@@ -1,12 +1,7 @@
 import { useDeferredValue, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import {
-  useHistoryQuery,
-  useLocale,
-  useNavigationQuery,
-  useProposalsQuery,
-} from '../shared/api/hooks'
+import { useHistoryQuery, useLocale, useNavigationQuery } from '../shared/api/hooks'
 import type {
   DocumentSummary,
   HistoryEvent,
@@ -45,31 +40,13 @@ export function HistoryPage() {
     type ?? undefined,
   )
   const navigation = useNavigationQuery()
-  const proposals = useProposalsQuery('all')
-  const visible = useMemo(() => {
-    const normalized = query
-      .trim()
-      .toLocaleLowerCase(locale === 'pt-BR' ? 'pt-BR' : 'en-US')
-    return (history.data?.events ?? []).filter(
-      (event) =>
-        (!type || event.type === type) &&
-        (!normalized ||
-          `${event.title} ${event.body} ${event.actor}`
-            .toLocaleLowerCase(locale === 'pt-BR' ? 'pt-BR' : 'en-US')
-            .includes(normalized)),
-    )
-  }, [history.data?.events, locale, query, type])
+  const visible = history.data?.events ?? []
   const documentTitles = useMemo(
     () =>
       new Map(
         (navigation.data?.documents ?? []).map((document) => [document.id, document]),
       ),
     [navigation.data?.documents],
-  )
-  const proposalTitles = useMemo(
-    () =>
-      new Map((proposals.data?.items ?? []).map((proposal) => [proposal.id, proposal])),
-    [proposals.data],
   )
 
   const update = (name: string, value: string) => {
@@ -87,15 +64,13 @@ export function HistoryPage() {
   }
   const clear = () => setParams(new URLSearchParams())
 
-  if (history.isLoading || navigation.isLoading || proposals.isLoading)
-    return <LoadingState />
-  if (history.isError || navigation.isError || proposals.isError)
+  if (history.isLoading || navigation.isLoading) return <LoadingState />
+  if (history.isError || navigation.isError)
     return (
       <ErrorState
         onRetry={() => {
           void history.refetch()
           void navigation.refetch()
-          void proposals.refetch()
         }}
       />
     )
@@ -163,11 +138,6 @@ export function HistoryPage() {
                     document={
                       event.documentId
                         ? documentTitles.get(event.documentId)
-                        : undefined
-                    }
-                    proposalTitle={
-                      event.proposalId
-                        ? proposalTitles.get(event.proposalId)?.title
                         : undefined
                     }
                     locale={locale}
@@ -243,12 +213,15 @@ function HistoryCard({
             </Link>
           ) : null}
           {event.documentId ? (
-            document ? (
+            document || event.documentSlug ? (
               <Link
                 className="target-chip"
-                to={documentRevisionHref(document.slug, event.revisionId)}
+                to={documentRevisionHref(
+                  document?.slug ?? event.documentSlug!,
+                  event.revisionId,
+                )}
               >
-                {t('history.document')}: {document.title}
+                {t('history.document')}: {document?.title ?? event.documentSlug}
               </Link>
             ) : (
               <span className="target-chip">

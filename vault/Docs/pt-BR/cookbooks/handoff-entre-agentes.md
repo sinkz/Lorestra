@@ -2,7 +2,7 @@
 id: lorestra.docs.cookbook-agent-handoff.pt-br
 slug: cookbook-handoff-entre-agentes
 locale: pt-BR
-title: Cookbook: handoff entre agentes
+title: 'Cookbook: handoff entre agentes'
 description: Um handoff delimitado para que o próximo agente continue sem adivinhar.
 folderId: folder.docs.pt-br
 visibility: public
@@ -12,7 +12,8 @@ createdAt: 2026-08-02T09:00:00.000Z
 updatedAt: 2026-08-21T09:00:00.000Z
 author: Conselho de agentes
 tags: [cookbook, agentes, handoff]
-relatedDocumentIds: [lorestra.team.agent-operating-manual, lorestra.docs.humanos-e-agentes.pt-br]
+relatedDocumentIds:
+  [lorestra.team.agent-operating-manual, lorestra.docs.humanos-e-agentes.pt-br]
 nav:
   visible: true
   parentId: folder.docs.pt-br

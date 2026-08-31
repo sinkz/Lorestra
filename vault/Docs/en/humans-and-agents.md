@@ -37,6 +37,8 @@ Every contribution should state:
 
 Multiple agents can work in parallel when their roles are distinct. One agent can gather evidence, another can challenge contradictions, and a third can edit the proposal for clarity. Parallel activity is not a substitute for a single owner who integrates the result.
 
+In the current browser integration, tools inherit that browser's session; agents do not gain independent credentials or roles. Two authorized sessions may propose concurrently, but a stale document or proposal version produces a conflict. Read the new version, compare it with the preserved draft, and resubmit consciously. This is optimistic collaboration, not live coediting or offline synchronization. A cloned local installation can exercise the same workflow; sharing across machines requires the separately configured identity and deployment milestone.
+
 ## Preserve provenance
 
 An agent should quote only the minimum useful evidence, link to the source document, and distinguish an observation from an inference. A fluent paragraph without provenance is not a trustworthy knowledge change. If an agent discovers that a published document is incomplete, it should open a proposal or leave a review comment rather than silently patching the vault.

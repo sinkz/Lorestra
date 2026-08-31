@@ -2,7 +2,7 @@
 id: lorestra.docs.cookbook-decision.en
 slug: cookbook-decision-record
 locale: en
-title: Cookbook: decision record
+title: 'Cookbook: decision record'
 description: Make a consequential decision easy to revisit without reopening the entire debate.
 folderId: folder.docs.en
 visibility: public
@@ -12,7 +12,8 @@ createdAt: 2026-08-02T09:00:00.000Z
 updatedAt: 2026-08-21T09:00:00.000Z
 author: Product and engineering
 tags: [cookbook, decision, adr]
-relatedDocumentIds: [lorestra.product.north-star, lorestra.engineering.contracts-adapters]
+relatedDocumentIds:
+  [lorestra.product.north-star, lorestra.engineering.contracts-adapters]
 nav:
   visible: true
   parentId: folder.docs.en

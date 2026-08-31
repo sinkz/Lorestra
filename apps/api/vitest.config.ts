@@ -1,13 +1,19 @@
-import { cloudflareTest } from '@cloudflare/vitest-plugin'
+import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [
-    cloudflareTest({
+    cloudflareTest(async () => ({
       wrangler: { configPath: './wrangler.jsonc' },
-    }),
+      miniflare: {
+        bindings: { TEST_MIGRATIONS: await readD1Migrations('./migrations') },
+      },
+    })),
   ],
   test: {
+    // Keep isolated workerd instances bounded on developer machines and CI.
+    fileParallelism: false,
+    maxWorkers: 1,
     include: ['src/**/*.test.ts'],
     globals: true,
     passWithNoTests: false,

@@ -1,6 +1,14 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
+    ".": {
+      "entry": ["scripts/*.test.mjs", "scripts/backend-*.d.mts"],
+    },
+    "apps/api": {
+      "entry": ["src/runtime/*.ts", "src/**/*.test.ts"],
+      // Built-in workerd modules are supplied by the Workers test runtime.
+      "ignoreDependencies": ["cloudflare"],
+    },
     "apps/e2e": {
       "entry": ["steps/**/*.ts", "scripts/**/*.mjs"],
     },

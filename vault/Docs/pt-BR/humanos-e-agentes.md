@@ -37,6 +37,8 @@ Toda contribuição deve registrar:
 
 Vários agentes podem trabalhar em paralelo quando os papéis são distintos. Um reúne evidências, outro desafia contradições e um terceiro melhora a proposta. Atividade paralela não substitui uma pessoa responsável por integrar o resultado.
 
+Na integração atual, as ferramentas herdam a sessão do navegador; agentes não recebem credenciais nem papéis independentes. Duas sessões autorizadas podem propor ao mesmo tempo, mas uma base de documento ou proposta desatualizada gera conflito. Leia a nova versão, compare com o rascunho preservado e reenvie conscientemente. Isso não é coedição em tempo real nem sincronização offline. Quem clonar o projeto pode testar o mesmo fluxo localmente; compartilhar entre máquinas exige o marco separado de identidade e deploy.
+
 ## Preserve a origem
 
 Um agente deve citar apenas a evidência necessária, apontar para o documento-fonte e separar observação de inferência. Um parágrafo fluente sem origem não é uma mudança de conhecimento confiável. Se descobrir que um documento publicado está incompleto, abra uma proposta ou deixe um comentário de revisão; não edite o vault em silêncio.

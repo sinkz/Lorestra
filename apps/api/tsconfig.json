@@ -5,5 +5,5 @@
     "types": ["@cloudflare/workers-types", "vitest/globals"],
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "vitest.config.ts"]
+  "include": ["src/**/*.ts", "vitest.config.ts", "worker-configuration.d.ts"]
 }

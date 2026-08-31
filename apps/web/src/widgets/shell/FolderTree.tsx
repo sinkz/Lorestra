@@ -23,6 +23,7 @@ type TreeEntry = {
   document?: DocumentSummary
   hasChildren?: boolean
   itemCount?: number
+  partialCount?: boolean
 }
 
 function flattenTree(
@@ -30,6 +31,8 @@ function flattenTree(
   documents: DocumentSummary[],
   expanded: Record<string, boolean>,
   depth = 1,
+  defaultExpanded = true,
+  partialCounts = false,
 ): TreeEntry[] {
   const entries: TreeEntry[] = []
   const docsByFolder = new Map<string, DocumentSummary[]>()
@@ -43,7 +46,7 @@ function flattenTree(
     const cached = countByFolder.get(node.id)
     if (cached !== undefined) return cached
     const count =
-      (docsByFolder.get(node.id)?.length ?? 0) +
+      Math.max(node.documentCount, docsByFolder.get(node.id)?.length ?? 0) +
       node.children.reduce((total, child) => total + countDocuments(child), 0)
     countByFolder.set(node.id, count)
     return count
@@ -51,9 +54,11 @@ function flattenTree(
   const visit = (nodes: FolderNode[], currentDepth: number) => {
     for (const node of nodes) {
       const itemCount = countDocuments(node)
-      if (itemCount === 0) continue
+      if (itemCount === 0 && !node.hasChildren) continue
       const hasChildren =
-        node.children.length > 0 || (docsByFolder.get(node.id)?.length ?? 0) > 0
+        node.hasChildren ||
+        node.children.length > 0 ||
+        (docsByFolder.get(node.id)?.length ?? 0) > 0
       entries.push({
         kind: 'folder',
         id: node.id,
@@ -61,8 +66,9 @@ function flattenTree(
         depth: currentDepth,
         hasChildren,
         itemCount,
+        partialCount: partialCounts,
       })
-      if (!(expanded[node.id] ?? true)) continue
+      if (!(expanded[node.id] ?? defaultExpanded)) continue
       visit(node.children, currentDepth + 1)
       for (const document of docsByFolder.get(node.id) ?? []) {
         entries.push({
@@ -82,18 +88,33 @@ function flattenTree(
 export function FolderTree({
   folders,
   documents,
+  defaultExpanded = true,
+  partialCounts = false,
+  onToggleFolder,
 }: {
   folders: FolderNode[]
   documents: DocumentSummary[]
+  defaultExpanded?: boolean
+  partialCounts?: boolean
+  onToggleFolder?: (id: string) => void
 }) {
   const { t } = useTranslation()
   const location = useLocation()
   const expandedFolders = useShellStore((state) => state.expandedFolders)
-  const toggleFolder = useShellStore((state) => state.toggleFolder)
+  const storeToggleFolder = useShellStore((state) => state.toggleFolder)
+  const toggleFolder = onToggleFolder ?? storeToggleFolder
   const parentRef = useRef<HTMLDivElement>(null)
   const entries = useMemo(
-    () => flattenTree(folders, documents, expandedFolders),
-    [documents, expandedFolders, folders],
+    () =>
+      flattenTree(
+        folders,
+        documents,
+        expandedFolders,
+        1,
+        defaultExpanded,
+        partialCounts,
+      ),
+    [documents, expandedFolders, folders, defaultExpanded, partialCounts],
   )
   const virtualizer = useVirtualizer({
     count: entries.length,
@@ -161,7 +182,8 @@ export function FolderTree({
         focusRow(entries.length - 1)
         return
       }
-      const open = entry.kind === 'folder' && (expandedFolders[entry.id] ?? true)
+      const open =
+        entry.kind === 'folder' && (expandedFolders[entry.id] ?? defaultExpanded)
       if (event.key === 'ArrowRight' && entry.kind === 'folder') {
         event.preventDefault()
         if (!open) toggleFolder(entry.id)
@@ -194,7 +216,7 @@ export function FolderTree({
         }
       }
     },
-    [entries, expandedFolders, focusRow, toggleFolder],
+    [entries, expandedFolders, focusRow, toggleFolder, defaultExpanded],
   )
 
   const registerRow = useCallback((index: number, node: HTMLElement | null) => {
@@ -222,7 +244,7 @@ export function FolderTree({
                 selected={virtualRow.index === selectedIndex}
                 open={
                   entry.kind === 'folder' && entry.hasChildren
-                    ? (expandedFolders[entry.id] ?? true)
+                    ? (expandedFolders[entry.id] ?? defaultExpanded)
                     : false
                 }
                 t={t}
@@ -251,7 +273,7 @@ export function FolderTree({
             open={
               entries[virtualRow.index].kind === 'folder' &&
               entries[virtualRow.index].hasChildren
-                ? (expandedFolders[entries[virtualRow.index].id] ?? true)
+                ? (expandedFolders[entries[virtualRow.index].id] ?? defaultExpanded)
                 : false
             }
             t={t}
@@ -365,9 +387,16 @@ const TreeRow = memo(function TreeRow({
         <span className="tree-row-name">{entry.name}</span>
         <span
           className="tree-row-meta"
-          aria-label={t('folders.documentCount', { count: entry.itemCount })}
+          aria-label={t(
+            entry.partialCount ? 'editor.loadedCount' : 'folders.documentCount',
+            { count: entry.itemCount },
+          )}
         >
-          {entry.itemCount}
+          {entry.partialCount
+            ? entry.itemCount
+              ? `${entry.itemCount}+`
+              : '…'
+            : entry.itemCount}
         </span>
       </Link>
     </div>

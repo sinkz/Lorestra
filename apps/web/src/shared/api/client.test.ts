@@ -36,11 +36,40 @@ describe('application adapters', () => {
 
     const created = await proposals.create({
       title: 'Memória do adapter',
-      body: '# Memória do adapter',
-      locale: 'pt-BR',
+      summary: 'Memória do adapter',
+      changes: [
+        {
+          id: 'change-adapter',
+          target: {
+            documentId: null,
+            slug: 'memoria-do-adapter',
+            title: 'Memória do adapter',
+          },
+          changeType: 'added',
+          baseVersion: null,
+          after: '# Memória do adapter',
+          metadata: {
+            locale: 'pt-BR',
+            type: 'note',
+            folderId: 'folder.docs.pt-br',
+            tags: [],
+            relations: [],
+            status: 'published',
+            visibility: 'public',
+          },
+        },
+      ],
     })
-    await proposals.transition({ proposalId: created.id, status: 'approved' })
-    await proposals.transition({ proposalId: created.id, status: 'merged' })
+    const approved = await proposals.transition({
+      proposalId: created.id,
+      expectedProposalVersion: created.proposalVersion!,
+      status: 'approved',
+    })
+    await proposals.transition({
+      proposalId: created.id,
+      expectedProposalVersion: approved.proposalVersion!,
+      status: 'merged',
+    })
 
     const navigation = await knowledge.getNavigation({ locale: 'pt-BR' })
     expect(
@@ -56,6 +85,9 @@ describe('application adapters', () => {
 
     await proposals.transition({
       proposalId: 'proposal-docs-reading-loop-002',
+      expectedProposalVersion: (await proposals.get({
+        proposalId: 'proposal-docs-reading-loop-002',
+      }))!.proposalVersion!,
       status: 'merged',
     })
     const current = await knowledge.getDocument({

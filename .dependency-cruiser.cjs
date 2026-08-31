@@ -13,7 +13,8 @@ module.exports = {
       severity: 'error',
       comment: 'Every import must resolve in the workspace.',
       from: {},
-      to: { couldNotResolve: true },
+      // Workerd provides these virtual modules; they are not npm packages.
+      to: { couldNotResolve: true, pathNot: '^cloudflare:(workers|test)$' },
     },
     {
       name: 'contracts-are-runtime-agnostic',

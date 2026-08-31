@@ -45,3 +45,7 @@ Resultados de busca são uma porta para o contexto, não uma prova. Abra o docum
 Não edite o corpo publicado no lugar. Uma proposta registra documento-alvo, versão-base, motivo, conteúdo sugerido e conversa de revisão. Se a versão-base mudou, faça rebase da proposta em vez de sobrescrever o trabalho de outra pessoa.
 
 Veja um exemplo completo em [Do incidente ao conhecimento reutilizável](cookbooks/incidente-para-conhecimento.md).
+
+## Revise uma correção
+
+Abra uma proposta pela lista, inspecione cada arquivo alterado e use Solicitar alterações com um motivo concreto. A pessoa autora edita e reenvia a mesma proposta; a versão aumenta e a aprovação anterior é removida. Um mantenedor aprova a versão revisada e confirma o merge explicitamente. O histórico permite voltar à proposta e à revisão resultante do documento. Um documento novo pode ser uma nota, decisão, incidente, processo ou outro tipo suportado; basta uma conversa ou ideia, sem precisar resolver um bug.

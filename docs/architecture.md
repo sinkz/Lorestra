@@ -30,9 +30,9 @@ flowchart TB
   Z[Zod contract package] --> MA
   Z --> HA
   Z --> RT
-  KP -. production .-> R2[(R2)]
-  KP -. production .-> D1[(D1)]
-  PP -. production .-> D1
+  KP --> R2[(R2)]
+  KP --> D1[(D1)]
+  PP --> D1
 ```
 
 ## Browser boundaries
@@ -43,7 +43,7 @@ The UI follows Feature-Sliced Design dependency direction: shared code cannot im
 
 ## Agent boundary
 
-The WebMCP feature registers ten imperative tools with `document.modelContext.registerTool()`. A single `AbortController` owns their page lifecycle. Read tools declare `readOnlyHint`; tools returning vault or proposal content declare `untrustedContentHint`. Write tools create or transition proposals through the same clients used by the UI.
+The WebMCP feature registers eleven imperative tools with `document.modelContext.registerTool()`, including update/resubmit. A single `AbortController` owns their page lifecycle. Read tools declare `readOnlyHint`; tools returning vault or proposal content declare `untrustedContentHint`. Writes use the same mutation coordinator, idempotency keys and cache invalidation as the UI. The agent guide exposes current capabilities and storage limits but never a session credential.
 
 The registration layer is optional at runtime. An unsupported browser gets no exception and no degraded human interface. Inputs are constrained by JSON Schema and checked again at execution. Body, list, history, diff, and graph outputs have explicit limits.
 
@@ -51,7 +51,9 @@ The registration layer is optional at runtime. An unsupported browser gets no ex
 
 The Hono Worker is organized by use case instead of horizontal controllers and services. Each vertical slice owns route registration, transport mapping, its use case, and integration coverage. Shared knowledge and proposal modules expose ports; adapters implement those ports without leaking Cloudflare storage types into the contract.
 
-The public Worker registers reads only. Durable writes are a future adapter and policy concern because public collaboration requires authentication, authorization, abuse control, concurrency rules, append-only audit storage, and backup. The browser mock demonstrates proposal behavior but is not a security boundary.
+The durable composition registers read-vault, manage-proposals and manage-session slices. Their declarative request/response schemas also generate `/api/openapi.json`; authentication, bounded JSON streaming, request quotas and typed errors surround each slice. The legacy memory composition remains an explicit test scaffold, not the Worker entry point.
+
+Both local and shared compositions use persistent D1/R2 adapters. Local composition additionally registers a token exchange for pre-created synthetic operator sessions. Shared composition does not register that endpoint; a real provider login is a separate milestone. A cookie, CSRF token and UI capability do not replace server-side role and publication guards. See ADR-0006 and ADR-0007.
 
 ## Published knowledge invariant
 
@@ -59,16 +61,17 @@ The public Worker registers reads only. Durable writes are a future adapter and 
 draft proposal -> review -> approved proposal -> merge -> immutable revision
 ```
 
-Creating a proposal and approving it do not change the document returned by the read client. Merge is the only operation that creates a published revision. This invariant is tested at the state-machine, API, WebMCP, and browser-smoke seams.
+Creating or approving a proposal does not change the document returned by the read client. Editing reopens the same proposal and clears its approval. Merge prepares immutable R2 bodies, then commits document pointers, metadata, links, revision snapshots, proposal state, audit events and the idempotent result in one guarded D1 batch. Tests inject late SQL failures and races against real bindings. No global Worker mutex or asynchronous post-response publication is used.
 
 The public read projection includes published documents and public archives. An archive is retained historical knowledge (a black hole in the Atlas), not a privacy action. Drafts and internal documents remain excluded from navigation, reads, search, graphs, and history in both adapters. See the [celestial content model](atlas-content-model.md) for the metadata mapping and fictional bilingual examples.
 
 ## Replacing the mock
 
-1. Start the Worker and set `VITE_DATA_ADAPTER=http`.
-2. Confirm the HTTP clients pass the same contract suite.
-3. Connect production knowledge and proposal ports to R2/D1 adapters.
-4. Add server-side identity and policy before registering write routes.
-5. Remove `@lorestra/mock-vault` from the web composition root and workspace.
+1. Run `pnpm backend:init` once, then `pnpm backend:dev`.
+2. Set `VITE_DATA_ADAPTER=http` and same-origin `VITE_LORESTRA_API_URL=/api` for local development.
+3. Start the frontend on the configured allowed origin and sign in with the operator-created local credential.
+4. Execute the persistent HTTP smoke and inspect the [local operations guide](operations/local-backend.md).
+
+Production builds already default to HTTP and exclude the mock fixture chunk. The mock remains available only for explicit visual development and contract tests. No page-level fixture fallback exists when the real API is down.
 
 No page, hook, widget, or WebMCP tool changes in this sequence.

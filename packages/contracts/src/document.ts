@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import {
   AuthorSchema,
+  ContentHashSchema,
   IdSchema,
   IsoDateTimeSchema,
   LocaleSchema,
@@ -21,6 +22,26 @@ export const DocumentTypeSchema = z.enum([
   'document',
 ])
 export type DocumentType = z.infer<typeof DocumentTypeSchema>
+
+/** Editable fields only: identity, authorship and revision fields are server-owned. */
+export const DurableProposalMetadataSchema = z
+  .object({
+    type: DocumentTypeSchema,
+    folderId: IdSchema,
+    tags: z
+      .array(z.string().trim().min(1).max(80))
+      .max(30)
+      .refine((tags) => new Set(tags).size === tags.length, 'Tags must be unique'),
+    relations: z
+      .array(IdSchema)
+      .max(200)
+      .refine((ids) => new Set(ids).size === ids.length, 'Relations must be unique'),
+    visibility: VisibilitySchema,
+    status: PublicationStatusSchema,
+    locale: LocaleSchema,
+  })
+  .strict()
+export type DurableProposalMetadata = z.infer<typeof DurableProposalMetadataSchema>
 
 export const NavigationMetadataSchema = z.object({
   visible: z.boolean(),
@@ -45,6 +66,9 @@ export const DocumentSummarySchema = z.object({
   tags: z.array(z.string().trim().min(1).max(80)).max(30),
   nav: NavigationMetadataSchema,
   relationCount: z.number().int().min(0),
+  folderId: IdSchema.optional(),
+  folderPath: z.string().max(1000).optional(),
+  deleted: z.boolean().optional(),
 })
 export type DocumentSummary = z.infer<typeof DocumentSummarySchema>
 
@@ -75,6 +99,9 @@ export const DocumentRevisionSchema = z.object({
   message: z.string().trim().min(1).max(500),
   createdAt: IsoDateTimeSchema,
   createdBy: AuthorSchema,
+  contentHash: ContentHashSchema.optional(),
+  proposalId: IdSchema.nullable().optional(),
+  metadata: DocumentSummarySchema.optional(),
 })
 export type DocumentRevision = z.infer<typeof DocumentRevisionSchema>
 
@@ -87,6 +114,10 @@ export type Document = z.infer<typeof DocumentSchema>
 export const DocumentResponseSchema = z.object({
   document: DocumentSchema,
   revision: DocumentRevisionSchema,
+  resolvedLinks: z
+    .array(z.object({ href: z.string().max(2000), slug: SlugSchema }))
+    .max(500)
+    .optional(),
 })
 export type DocumentResponse = z.infer<typeof DocumentResponseSchema>
 
@@ -96,3 +127,9 @@ export const GetDocumentInputSchema = z.object({
   version: z.coerce.number().int().positive().optional(),
 })
 export type GetDocumentInput = z.infer<typeof GetDocumentInputSchema>
+
+export const GetDocumentByIdInputSchema = z.object({
+  documentId: IdSchema,
+  version: z.coerce.number().int().positive().optional(),
+})
+export type GetDocumentByIdInput = z.infer<typeof GetDocumentByIdInputSchema>

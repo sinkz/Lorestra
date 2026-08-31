@@ -5,11 +5,15 @@ import { useNavigationQuery, useProposalsQuery } from '../../shared/api/hooks'
 import { Button, Icon, LoadingState, ErrorState } from '../../shared/ui'
 import { useShellStore } from '../../shared/store/useShellStore'
 import { FolderTree } from './FolderTree'
+import { RemoteFolderTree } from './RemoteFolderTree'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { TopbarSearch } from './TopbarSearch'
+import { SessionControls } from './SessionControls'
+import { useSession } from '../../shared/api/session'
 
 export function Shell() {
   const { t } = useTranslation()
+  const { session } = useSession()
   const location = useLocation()
   const navigate = useNavigate()
   const navigation = useNavigationQuery()
@@ -157,12 +161,16 @@ export function Shell() {
         <div className="folder-panel">
           <div className="folder-heading">
             <span>{t('folders.title')}</span>
-            <span>{navigation.data?.documents.length ?? '—'}</span>
+            {!navigation.data?.partial ? (
+              <span>{navigation.data?.documents.length ?? '—'}</span>
+            ) : null}
           </div>
           {navigation.isLoading ? (
             <LoadingState />
           ) : navigation.isError ? (
             <ErrorState onRetry={() => void navigation.refetch()} />
+          ) : navigation.data?.partial ? (
+            <RemoteFolderTree key={locale} root={navigation.data} />
           ) : (
             <FolderTree
               folders={navigation.data?.folders ?? []}
@@ -172,9 +180,7 @@ export function Shell() {
         </div>
         <div className="sidebar-footer">
           <span className="sync-dot" aria-hidden="true" />
-          <span>
-            {t('shell.synced')} · {t('shell.momentsAgo')}
-          </span>
+          <span>{t(`session.${session.mode}`)}</span>
           <LanguageSwitcher />
         </div>
       </aside>
@@ -204,15 +210,24 @@ export function Shell() {
             {navigation.data?.vault.branch ?? 'main'}
           </div>
           <TopbarSearch />
-          <NavLink
-            className="topbar-new"
-            to="/library?new=1"
-            aria-label={t('shell.newMemory')}
-          >
-            <Icon name="plus" />
-            <span>{t('shell.newMemory')}</span>
-          </NavLink>
+          <SessionControls />
+          {session.capabilities.createProposal && !session.readOnly.enabled ? (
+            <NavLink
+              className="topbar-new"
+              to="/library?new=1"
+              aria-label={t('shell.newMemory')}
+            >
+              <Icon name="plus" />
+              <span>{t('shell.newMemory')}</span>
+            </NavLink>
+          ) : null}
         </header>
+        {session.readOnly.enabled ? (
+          <div className="session-readonly" role="status">
+            {t('session.readOnly')}
+            {session.readOnly.reason ? ` · ${session.readOnly.reason}` : ''}
+          </div>
+        ) : null}
         <main id="main-content" className="workspace" tabIndex={-1}>
           <Outlet />
         </main>

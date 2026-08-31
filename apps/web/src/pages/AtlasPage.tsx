@@ -1,7 +1,11 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { useGraphQuery, useNavigationQuery } from '../shared/api/hooks'
+import {
+  useGraphQuery,
+  useNavigationQuery,
+  useDocumentByIdQuery,
+} from '../shared/api/hooks'
 import { EmptyState, ErrorState, LoadingState, StatusBadge } from '../shared/ui'
 
 const GraphCanvas = lazy(() =>
@@ -26,9 +30,7 @@ export function AtlasPage() {
         ? 'folder'
         : 'entire'
   const graph = useGraphQuery({ scope, documentId, folderId })
-  const selectedDocument = navigation.data?.documents.find(
-    (document) => document.id === documentId,
-  )
+  const selectedDocument = useDocumentByIdQuery(documentId).data
   const selectedFolder = navigation.data?.folders
     .flatMap((folder) => [folder, ...folder.children])
     .find((folder) => folder.id === folderId)
@@ -44,15 +46,8 @@ export function AtlasPage() {
       : scope === 'folder'
         ? t('atlas.folderSubtitle')
         : t('atlas.subtitle')
-  const visibleDocs = useMemo(
-    () =>
-      graph.data?.nodes
-        .map((node) =>
-          navigation.data?.documents.find((document) => document.id === node.id),
-        )
-        .filter(Boolean) ?? [],
-    [graph.data?.nodes, navigation.data?.documents],
-  )
+  const visibleDocs =
+    graph.data?.nodes.filter((node) => node.kind !== 'folder' && node.slug) ?? []
 
   const setScope = (nextScope: 'entire' | 'folder' | 'related') => {
     const next = new URLSearchParams(params)
@@ -123,8 +118,10 @@ export function AtlasPage() {
             key={`${scope}:${documentId ?? ''}:${folderId ?? ''}`}
             graph={graph.data}
             onOpen={(id) => {
-              const document = navigation.data.documents.find((item) => item.id === id)
-              if (document)
+              const document = graph.data.nodes.find(
+                (item) => item.id === id && item.kind !== 'folder',
+              )
+              if (document?.slug)
                 navigate(`/documents/${encodeURIComponent(document.slug)}?tab=preview`)
               else if (
                 graph.data.nodes.some(
@@ -143,12 +140,12 @@ export function AtlasPage() {
                 <Link
                   className="atlas-list-link"
                   key={document.id}
-                  to={`/documents/${encodeURIComponent(document.slug)}?tab=preview`}
+                  to={`/documents/${encodeURIComponent(document.slug!)}?tab=preview`}
                 >
                   <StatusBadge status={document.status} kind={document.kind} />
-                  <strong>{document.title}</strong>
+                  <strong>{document.label}</strong>
                   <small>
-                    {document.folderPath} · v{document.version}
+                    {t(`common.kind.${document.kind}`, { defaultValue: document.kind })}
                   </small>
                 </Link>
               ) : null,
@@ -176,7 +173,9 @@ export function AtlasPage() {
             {t('atlas.nodes', { count: graph.data.nodes.length })} ·{' '}
             {t('atlas.relations', { count: graph.data.edges.length })}
           </strong>
-          <span>{t('atlas.subtitle')}</span>
+          <span>
+            {t(graph.data.truncated ? 'editor.graphLimited' : 'atlas.subtitle')}
+          </span>
         </div>
       </div>
     </section>

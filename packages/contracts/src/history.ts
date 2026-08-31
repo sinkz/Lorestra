@@ -17,6 +17,8 @@ export const HistoryEventTypeSchema = z.enum([
   'merged',
   'document_published',
   'document_updated',
+  'proposal_updated',
+  'document_deleted',
 ])
 export type HistoryEventType = z.infer<typeof HistoryEventTypeSchema>
 
@@ -51,3 +53,9 @@ export const HistoryResponseSchema = z.object({
   pageInfo: PageInfoSchema,
 })
 export type HistoryResponse = z.infer<typeof HistoryResponseSchema>
+
+export const GetHistoryEventInputSchema = z.object({ eventId: IdSchema })
+export type GetHistoryEventInput = z.infer<typeof GetHistoryEventInputSchema>
+
+export const HistoryEventResponseSchema = z.object({ event: HistoryEventSchema })
+export type HistoryEventResponse = z.infer<typeof HistoryEventResponseSchema>

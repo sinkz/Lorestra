@@ -45,3 +45,7 @@ Search results are a route into context, not proof. Open the document, verify it
 Do not edit the published body in place. A proposal records its target document, base version, reason, proposed content, and reviewer conversation. If the base version has moved, rebase the proposal rather than overwriting someone else's work.
 
 For a worked example, see [Incident to reusable knowledge](cookbooks/incident-to-knowledge.md).
+
+## Review a correction
+
+Open a proposal from the list, inspect each changed file and use Request changes with a concrete reason. The author edits and resubmits that same proposal; its version increases and earlier approval is cleared. A maintainer then approves the reviewed version and explicitly confirms merge. History links back to the proposal and resulting document revision. New documents can be notes, decisions, incidents, processes or other supported knowledge types; a conversation or idea is enough—no software bug is required.

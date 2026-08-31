@@ -31,6 +31,8 @@ export const SearchResultSchema = z.object({
   score: z.number().min(0),
   updatedAt: IsoDateTimeSchema,
   relationCount: z.number().int().min(0),
+  folderId: IdSchema.optional(),
+  folderPath: z.string().max(1000).optional(),
 })
 export type SearchResult = z.infer<typeof SearchResultSchema>
 

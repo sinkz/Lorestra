@@ -9,7 +9,8 @@
     "dev": "wrangler dev",
     "test": "vitest run",
     "test:mutation": "stryker run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "types:generate": "wrangler types --env-interface Env --include-runtime false",
+    "typecheck": "pnpm types:generate && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@hono/zod-openapi": "1.6.1",

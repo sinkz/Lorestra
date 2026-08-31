@@ -4,5 +4,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["playwright.config.ts", "steps/**/*.ts"]
+  "include": ["playwright*.config.ts", "steps/**/*.ts", "fixtures/**/*.ts"]
 }

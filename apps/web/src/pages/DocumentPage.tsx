@@ -1,9 +1,8 @@
+import { ProposalEditorDialog } from '../features/proposals/ProposalEditorDialog'
+import { useSession } from '../shared/api/session'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useForm } from 'react-hook-form'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { useQueryClient } from '@tanstack/react-query'
-import { useAppClients } from '../shared/api/client'
 import {
   useDocumentQuery,
   useHistoryQuery,
@@ -17,22 +16,35 @@ import {
   ErrorState,
   LoadingState,
   MarkdownContent,
-  ModalDialog,
+  Pagination,
   StatusBadge,
   formatDate,
 } from '../shared/ui'
 
 type DocumentTab = 'preview' | 'markdown' | 'relations' | 'history'
-type ProposalForm = { title: string; body: string; reason: string }
 const documentTabs: DocumentTab[] = ['preview', 'markdown', 'relations', 'history']
 
 export function DocumentPage() {
+  const { slug } = useParams<{ slug: string }>()
+  const locale = useLocale()
+  const [params] = useSearchParams()
+  // A different document/revision starts a separate editor; tab changes preserve its draft.
+  return (
+    <DocumentWorkspace
+      key={`${locale}:${slug}:${params.get('version') ?? 'current'}`}
+    />
+  )
+}
+
+function DocumentWorkspace() {
   const { t } = useTranslation()
   const locale = useLocale()
+  const { session } = useSession()
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [editing, setEditing] = useState(false)
+  const [editorBase, setEditorBase] = useState<Document | undefined>()
   const [source, setSource] = useState('')
   const [copied, setCopied] = useState(false)
   const [proposalOpen, setProposalOpen] = useState(false)
@@ -41,8 +53,15 @@ export function DocumentPage() {
   const documentQuery = useDocumentQuery(slug, requestedVersion)
   const navigation = useNavigationQuery()
   const document = documentQuery.data
-  const history = useHistoryQuery(document?.id)
   const tab = normalizeTab(params.get('tab'))
+  const historyCursor = params.get('historyCursor') ?? undefined
+  const history = useHistoryQuery(
+    document?.id,
+    historyCursor,
+    undefined,
+    undefined,
+    Boolean(document?.id) && tab === 'history',
+  )
   const documentSlugs = useMemo(
     () =>
       (navigation.data?.documents ?? [])
@@ -52,13 +71,14 @@ export function DocumentPage() {
   )
 
   useEffect(() => {
-    setSource(document?.body ?? '')
-    setEditing(false)
+    if (!editing && !proposalOpen) setSource(document?.body ?? '')
     setCopied(false)
-  }, [document?.id, document?.body])
+  }, [document?.id, document?.body, editing, proposalOpen])
 
   const relatedDocuments = useMemo(() => {
-    if (!document || !navigation.data) return []
+    if (!document) return []
+    if (document.relatedDocuments) return document.relatedDocuments
+    if (!navigation.data) return []
     const ids = new Set([
       ...document.relatedDocumentIds,
       ...document.outgoingLinks,
@@ -136,7 +156,15 @@ export function DocumentPage() {
           <Button variant="secondary" icon="link" onClick={() => void copyLink()}>
             {copied ? t('document.copied') : t('document.copyLink')}
           </Button>
-          <Button variant="primary" icon="plus" onClick={() => setProposalOpen(true)}>
+          <Button
+            variant="primary"
+            icon="plus"
+            disabled={!session.capabilities.createProposal || session.readOnly.enabled}
+            onClick={() => {
+              if (!editing) setEditorBase(document)
+              setProposalOpen(true)
+            }}
+          >
             {t('document.proposeChanges')}
           </Button>
         </div>
@@ -199,47 +227,81 @@ export function DocumentPage() {
           aria-labelledby={`document-tab-${tab}`}
         >
           {tab === 'preview' ? (
-            <MarkdownContent source={document.body} documentSlugs={documentSlugs} />
+            <MarkdownContent
+              source={document.body}
+              documentSlugs={documentSlugs}
+              resolvedLinks={document.resolvedLinks}
+            />
           ) : tab === 'markdown' ? (
             <MarkdownTab
               source={source}
               editing={editing}
               onChange={setSource}
-              onEdit={() => setEditing(true)}
+              onEdit={() => {
+                setEditorBase(document)
+                setEditing(true)
+              }}
               onPropose={() => setProposalOpen(true)}
             />
           ) : tab === 'relations' ? (
             <RelationsTab document={document} relatedDocuments={relatedDocuments} />
+          ) : history.isLoading ? (
+            <LoadingState />
+          ) : history.isError ? (
+            <ErrorState error={history.error} onRetry={() => void history.refetch()} />
           ) : (
-            <DocumentHistoryTab
-              events={
-                history.data?.events ??
-                document.revisions.map((revision) => ({
-                  id: revision.id,
-                  type: 'publish' as const,
-                  title:
-                    revision.summary ||
-                    t('document.revision', { version: revision.version }),
-                  body: '',
-                  createdAt: revision.createdAt,
-                  actor: revision.author,
-                  revisionId: revision.id,
-                  documentId: document.id,
-                  proposalId: revision.proposalId,
-                }))
-              }
-            />
+            <>
+              <DocumentHistoryTab
+                events={
+                  history.data?.events ??
+                  document.revisions.map((revision) => ({
+                    id: revision.id,
+                    type: 'publish' as const,
+                    title:
+                      revision.summary ||
+                      t('document.revision', { version: revision.version }),
+                    body: '',
+                    createdAt: revision.createdAt,
+                    actor: revision.author,
+                    revisionId: revision.id,
+                    documentId: document.id,
+                    proposalId: revision.proposalId,
+                  }))
+                }
+              />
+              {history.data ? (
+                <Pagination
+                  pageInfo={history.data.pageInfo}
+                  pageSize={history.data.events.length}
+                  cursor={historyCursor}
+                  onNext={(cursor) => {
+                    const next = new URLSearchParams(params)
+                    if (cursor) next.set('historyCursor', cursor)
+                    else next.delete('historyCursor')
+                    setParams(next)
+                  }}
+                  onPrevious={(cursor) => {
+                    const next = new URLSearchParams(params)
+                    if (cursor) next.set('historyCursor', cursor)
+                    else next.delete('historyCursor')
+                    setParams(next)
+                  }}
+                />
+              ) : null}
+            </>
           )}
         </div>
         <DocumentAside document={document} locale={locale} />
       </div>
-      <ProposalDialog
+      <ProposalEditorDialog
         open={proposalOpen}
-        document={document}
-        initialBody={source || document.body}
-        locale={locale}
+        document={editorBase ?? document}
+        initialBody={source}
         onClose={() => setProposalOpen(false)}
-        onCreated={(id) => navigate(`/proposals/${encodeURIComponent(id)}`)}
+        onCreated={(id) => {
+          setEditing(false)
+          navigate(`/proposals/${encodeURIComponent(id)}`)
+        }}
       />
     </section>
   )
@@ -306,7 +368,9 @@ function RelationsTab({
   relatedDocuments,
 }: {
   document: Document
-  relatedDocuments: DocumentSummary[]
+  relatedDocuments: Array<
+    Pick<DocumentSummary, 'id' | 'slug' | 'title' | 'kind' | 'status' | 'folderPath'>
+  >
 }) {
   const { t } = useTranslation()
   if (!relatedDocuments.length) return <EmptyState title={t('document.noRelations')} />
@@ -420,120 +484,5 @@ function DocumentAside({
         </div>
       ) : null}
     </aside>
-  )
-}
-
-function ProposalDialog({
-  open,
-  document,
-  initialBody,
-  locale,
-  onClose,
-  onCreated,
-}: {
-  open: boolean
-  document: Document
-  initialBody: string
-  locale: 'en' | 'pt-BR'
-  onClose: () => void
-  onCreated: (id: string) => void
-}) {
-  const { t } = useTranslation()
-  const clients = useAppClients()
-  const queryClient = useQueryClient()
-  const [error, setError] = useState('')
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { isSubmitting, errors },
-  } = useForm<ProposalForm>({
-    defaultValues: { title: `Update ${document.title}`, body: initialBody, reason: '' },
-  })
-
-  useEffect(() => {
-    if (open)
-      reset({ title: `Update ${document.title}`, body: initialBody, reason: '' })
-  }, [document.title, initialBody, open, reset])
-  const close = () => {
-    reset()
-    setError('')
-    onClose()
-  }
-  const submit = async (values: ProposalForm) => {
-    try {
-      const proposal = await clients.proposals.create({
-        title: values.title,
-        body: `${values.reason ? `${values.reason}\n\n` : ''}${values.body}`,
-        documentId: document.id,
-        locale,
-      })
-      await queryClient.invalidateQueries({ queryKey: ['proposals'] })
-      close()
-      onCreated(proposal.id)
-    } catch {
-      setError(t('common.errorTitle'))
-    }
-  }
-
-  return (
-    <ModalDialog
-      className="memory-dialog"
-      open={open}
-      aria-labelledby="proposal-dialog-title"
-      onRequestClose={close}
-    >
-      <div className="memory-dialog-card">
-        <div className="dialog-header">
-          <div>
-            <span className="eyebrow">{t('document.proposeChanges')}</span>
-            <h2 id="proposal-dialog-title">{document.title}</h2>
-          </div>
-          <Button
-            variant="subtle"
-            icon="close"
-            aria-label={t('common.close')}
-            onClick={close}
-          />
-        </div>
-        <p className="editor-note">{t('document.sourceNote')}</p>
-        <form onSubmit={(event) => void handleSubmit(submit)(event)}>
-          <label className="form-field">
-            <span>{t('proposals.titleField')}</span>
-            <input autoFocus {...register('title', { required: true })} />
-            {errors.title ? (
-              <small className="field-error">{t('common.required')}</small>
-            ) : null}
-          </label>
-          <label className="form-field">
-            <span>{t('proposals.reasonField')}</span>
-            <input
-              {...register('reason')}
-              placeholder={t('proposals.reasonPlaceholder')}
-            />
-          </label>
-          <label className="form-field">
-            <span>{t('document.markdown')}</span>
-            <textarea {...register('body', { required: true })} rows={12} />
-            {errors.body ? (
-              <small className="field-error">{t('common.required')}</small>
-            ) : null}
-          </label>
-          {error ? (
-            <p className="field-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <div className="dialog-actions">
-            <Button type="button" variant="secondary" onClick={close}>
-              {t('document.cancel')}
-            </Button>
-            <Button type="submit" variant="primary" disabled={isSubmitting}>
-              {isSubmitting ? t('common.loading') : t('document.proposeChanges')}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </ModalDialog>
   )
 }

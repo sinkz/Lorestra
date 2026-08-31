@@ -1,9 +1,4 @@
-import { createApp } from '../app/create-app.js'
+import { createDurableApp } from '../app/create-durable-app.js'
 
-/**
- * Composition root. The in-memory reader is deliberately the only default for
- * this scaffold; future R2/D1 adapters are injected here without changing slices.
- */
-const app = createApp()
-
-export default app
+// Shared builds never contain the local token exchange or mock fixture adapter.
+export default createDurableApp({ mode: 'shared' })

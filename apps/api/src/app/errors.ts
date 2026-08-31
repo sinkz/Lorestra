@@ -1,8 +1,9 @@
 import type { ApiErrorCode, ApiErrorResponse } from '@lorestra/contracts'
 import { HTTPException } from 'hono/http-exception'
+import { ZodError } from 'zod'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 
-class ApiError extends Error {
+export class ApiError extends Error {
   public constructor(
     public readonly code: ApiErrorCode,
     message: string,
@@ -36,6 +37,23 @@ export function errorFromUnknown(
     return {
       body: errorBody(requestId, error.code, error.message, error.details),
       status: error.status,
+    }
+  }
+  if (error instanceof ZodError) {
+    return {
+      body: errorBody(
+        requestId,
+        'validation_error',
+        'The request does not match the contract.',
+        {
+          issues: error.issues.map((issue) => ({
+            path: issue.path,
+            code: issue.code,
+            message: issue.message,
+          })),
+        },
+      ),
+      status: 422,
     }
   }
   if (error instanceof HTTPException) {

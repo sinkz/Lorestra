@@ -8,12 +8,16 @@
     "demo:webmcp": "node scripts/webmcp-demo.mjs",
     "install:browsers": "playwright install --with-deps",
     "test:e2e": "bddgen && playwright test",
+    "test:e2e:http": "bddgen -c playwright.http.config.ts && playwright test -c playwright.http.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@lorestra/contracts": "workspace:*",
     "@playwright/test": "1.62.1",
     "@types/node": "26.4.0",
+    "miniflare": "5.20260828.0-alpha",
     "playwright-bdd": "9.2.0",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vite": "8.2.2"
   }
 }

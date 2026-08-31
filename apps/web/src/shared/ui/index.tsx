@@ -1,3 +1,5 @@
+import { ApiError, errorMessageKey } from '../api/errors'
+
 import {
   useEffect,
   useMemo,
@@ -255,11 +257,20 @@ export function LoadingState() {
   )
 }
 
-export function ErrorState({ onRetry }: { onRetry?: () => void }) {
+export function ErrorState({
+  onRetry,
+  error,
+}: {
+  onRetry?: () => void
+  error?: unknown
+}) {
   const { t } = useTranslation()
   return (
     <div className="error-state" role="alert">
-      <strong>{t('common.errorTitle')}</strong>
+      <strong>{t(errorMessageKey(error))}</strong>
+      {error instanceof ApiError && error.requestId ? (
+        <small>{t('apiErrors.reference', { id: error.requestId })}</small>
+      ) : null}
       {onRetry ? <Button onClick={onRetry}>{t('common.retry')}</Button> : null}
     </div>
   )
@@ -317,16 +328,21 @@ export function Pagination({
 export function MarkdownContent({
   source,
   documentSlugs,
+  resolvedLinks,
 }: {
   source: string
   documentSlugs?: readonly string[]
+  resolvedLinks?: readonly { href: string; slug: string }[]
 }) {
   const components = useMemo<Components>(() => {
     const slugs = new Set(documentSlugs)
     return {
       a: ({ href, ...props }) => {
         delete props.node
-        const destination = resolveMarkdownDocumentLink(href, slugs)
+        const resolved = resolvedLinks?.find((link) => link.href === href)
+        const destination = resolved
+          ? `/documents/${encodeURIComponent(resolved.slug)}${href?.match(/[?#].*$/)?.[0] ?? ''}`
+          : resolveMarkdownDocumentLink(href, slugs)
         return destination ? (
           <Link {...props} to={destination} />
         ) : (
@@ -334,7 +350,7 @@ export function MarkdownContent({
         )
       },
     }
-  }, [documentSlugs])
+  }, [documentSlugs, resolvedLinks])
 
   return (
     <div className="markdown-content">

@@ -524,11 +524,17 @@ Then('the proposal status is {string}', async ({ page }, status: string) => {
 })
 
 Then('the proposal shows a governance error', async ({ page }) => {
-  await expect(page.getByRole('alert')).toContainText('Something went wrong')
+  const confirmation = page.getByRole('dialog', { name: 'Confirm merge', exact: true })
+  await expect(confirmation.getByRole('alert')).toContainText('Something went wrong')
+  await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click()
 })
 
 When('I merge the proposal into the vault', async ({ page }) => {
   await page.getByRole('button', { name: 'Merge into vault', exact: true }).click()
+  await page
+    .getByRole('dialog', { name: 'Confirm merge', exact: true })
+    .getByRole('button', { name: 'Confirm merge', exact: true })
+    .click()
 })
 
 When('I open vault history', async ({ page }) => {
@@ -574,10 +580,9 @@ Then('the memory dialog is closed', async ({ page }) => {
 
 When('I submit a memory titled {string}', async ({ page }, title: string) => {
   const dialog = page.getByRole('dialog')
-  await dialog.getByRole('textbox').nth(0).fill(title)
+  await dialog.getByLabel('Proposal title', { exact: true }).fill(title)
   await dialog
-    .getByRole('textbox')
-    .nth(1)
+    .getByLabel('Markdown', { exact: true })
     .fill('# Rollback note\n\nKeep the evidence and owner together.')
   await dialog.getByRole('button', { name: 'New proposal' }).click()
 })
@@ -594,8 +599,9 @@ Then('the open proposal counter is {int}', async ({ page }, count: number) => {
 
 Then('the proposal shows a new Markdown file diff', async ({ page }) => {
   await expect(page.locator('.diff-file')).toContainText(
-    'vault/Docs/en/agent-friendly-rollback-note.md',
+    'agent-friendly-rollback-note.md',
   )
+  await expect(page.locator('.diff-file')).toContainText('folder.docs.en')
   await expect(page.locator('.diff-line.add').first()).toBeVisible()
 })
 
@@ -684,7 +690,12 @@ Then('the proposal review queue uses rows instead of cards', async ({ page }) =>
 })
 
 Then('I can collapse the {string} directory', async ({ page }, folder: string) => {
+  await page
+    .getByRole('button', { name: `Expand ${folder}`, exact: true })
+    .first()
+    .click()
   const disclosure = page.getByRole('button', { name: `Collapse ${folder}` }).first()
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'true')
   await disclosure.click()
   await expect(
     page.getByRole('button', { name: `Expand ${folder}` }).first(),

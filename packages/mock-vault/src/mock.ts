@@ -1,6 +1,11 @@
 import {
   canTransitionProposal,
+  canEditProposal,
   CreateProposalInputSchema,
+  DurableCreateProposalInputSchema,
+  DurableProposalSchema,
+  DurableProposalTransitionInputSchema,
+  DurableUpdateProposalInputSchema,
   ProposalSchema,
   ProposalTransitionInputSchema,
 } from '@lorestra/contracts'
@@ -12,12 +17,21 @@ import type {
   DocumentResponse,
   DocumentRevision,
   DocumentType,
+  DurableCreateProposalInput,
+  DurableProposal,
+  DurableProposalChangeInput,
+  DurableProposalMetadata,
+  DurableProposalTransitionInput,
+  DurableUpdateProposalInput,
+  GetDocumentByIdInput,
   GetDocumentInput,
+  GetHistoryEventInput,
   GetProposalInput,
   GraphInput,
   GraphResponse,
   HistoryEvent,
   HistoryInput,
+  HistoryEventResponse,
   HistoryResponse,
   KnowledgeClient,
   ListDocumentsInput,
@@ -79,6 +93,7 @@ interface StoredRevision {
   readonly slug: string
   readonly locale: FixtureDocument['locale']
   readonly folderId: string
+  readonly folderPath: readonly string[]
   readonly kind: FixtureDocument['kind']
   readonly type: DocumentType
   readonly visibility: FixtureDocument['visibility']
@@ -98,6 +113,7 @@ export class MockVaultError extends Error {
     | 'invalid_input'
     | 'invalid_transition'
     | 'version_conflict'
+    | 'proposal_version_conflict'
     | 'duplicate_slug'
   public readonly status: number
 
@@ -195,6 +211,7 @@ const revisionFromDocument = (
   slug: document.slug,
   locale: document.locale,
   folderId: document.folderId,
+  folderPath: [...document.folderPath],
   kind: document.kind,
   type: documentType(document),
   visibility: document.visibility,
@@ -260,6 +277,9 @@ export class MockVaultStore {
   private readonly history: MutableHistoryEvent[]
   private readonly revisions: StoredRevision[]
   private mutationSequence = 0
+  private readonly durableProposals = new Map<string, DurableProposal>()
+  private readonly strictProposalIds = new Set<string>()
+  private mutationQueue: Promise<void> = Promise.resolve()
 
   public constructor(data: FixtureStoreData = mockVaultData) {
     this.folders = data.folders.map((folder) => clone(folder))
@@ -279,6 +299,150 @@ export class MockVaultStore {
 
   public listProposals(): readonly FixtureProposal[] {
     return clone(this.proposals)
+  }
+
+  public listDurableProposals(): DurableProposal[] {
+    return [...this.durableProposals.values()].map(clone)
+  }
+
+  public findDurableProposal(id: string): DurableProposal | undefined {
+    const proposal = this.durableProposals.get(id)
+    return proposal ? clone(proposal) : undefined
+  }
+
+  public saveDurableProposal(
+    proposal: DurableProposal,
+    requirePreconditions = false,
+  ): void {
+    this.durableProposals.set(proposal.id, clone(proposal))
+    if (requirePreconditions) this.strictProposalIds.add(proposal.id)
+  }
+
+  public requiresDurablePreconditions(proposalId: string): boolean {
+    return this.strictProposalIds.has(proposalId)
+  }
+
+  /** Serialized only inside this demo store; this is not distributed locking. */
+  public mutate<T>(work: () => Promise<T>): Promise<T> {
+    const result = this.mutationQueue.then(work)
+    this.mutationQueue = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
+
+  public validateDurableChanges(changes: readonly DurableProposalChangeInput[]): void {
+    for (const change of changes) {
+      const current = change.target.documentId
+        ? this.findDocumentById(change.target.documentId)
+        : undefined
+      if (change.changeType !== 'added' && !current)
+        throw new MockVaultError('not_found', 'Target document not found.')
+      if (current && current.version !== change.baseVersion)
+        throw new MockVaultError(
+          'version_conflict',
+          'The document changed after this revision was read.',
+          409,
+        )
+      const folder = this.folders.find((item) => item.id === change.metadata.folderId)
+      if (
+        !folder ||
+        (folder.locale !== 'all' && folder.locale !== change.metadata.locale)
+      )
+        throw new MockVaultError(
+          'invalid_input',
+          'Choose an existing folder for this locale.',
+        )
+      if (change.metadata.visibility === 'public' && folder.visibility !== 'public')
+        throw new MockVaultError(
+          'invalid_input',
+          'A public document needs a public folder.',
+        )
+      if (change.metadata.relations.some((id) => !this.findDocumentById(id)))
+        throw new MockVaultError(
+          'invalid_input',
+          'A relation points to an unknown document.',
+        )
+      if (
+        change.changeType !== 'deleted' &&
+        this.documents.some(
+          (document) =>
+            document.id !== change.target.documentId &&
+            document.locale === change.metadata.locale &&
+            document.slug === change.target.slug,
+        )
+      )
+        throw new MockVaultError(
+          'duplicate_slug',
+          'This locale already contains the document slug.',
+          409,
+        )
+    }
+  }
+
+  /** All validation/staging precedes the synchronous publication commit. */
+  public publishDurableProposal(proposal: DurableProposal): void {
+    const changes = proposal.changes.map(
+      ({ id, target, changeType, baseVersion, after, metadata, path }) => ({
+        id,
+        target,
+        changeType,
+        baseVersion,
+        after,
+        metadata,
+        ...(path ? { path } : {}),
+      }),
+    )
+    this.validateDurableChanges(changes)
+    const now = this.nextTimestamp()
+    const staged = changes.map((change, index) => {
+      const current = change.target.documentId
+        ? this.findDocumentById(change.target.documentId)
+        : undefined
+      const folderPath = this.folderPathFor(change.metadata.folderId)
+      const document: MutableDocument = {
+        id: current?.id ?? `lorestra.proposal.${proposal.id}.${index + 1}`,
+        slug: change.target.slug,
+        title: change.target.title,
+        description: current?.description ?? proposal.summary,
+        excerpt: excerptFromContent(change.after ?? ''),
+        content: change.after ?? '',
+        locale: change.metadata.locale,
+        folderId: change.metadata.folderId,
+        folderPath,
+        kind: current?.kind ?? 'document',
+        type: change.metadata.type,
+        visibility: change.metadata.visibility,
+        status: change.metadata.status,
+        version: (current?.version ?? 0) + 1,
+        author: current?.author ?? proposal.author.name,
+        createdAt: current?.createdAt ?? now,
+        updatedAt: now,
+        tags: [...change.metadata.tags],
+        relatedDocumentIds: [...change.metadata.relations],
+        path: `vault/${folderPath.join('/')}/${change.target.slug}.md`,
+      }
+      return { document, deleted: change.changeType === 'deleted' }
+    })
+    for (const { document, deleted } of staged) {
+      const index = this.documents.findIndex((current) => current.id === document.id)
+      if (deleted) {
+        if (index >= 0) this.documents.splice(index, 1)
+      } else if (index >= 0) this.documents[index] = document
+      else this.documents.push(document)
+      this.revisions.push(revisionFromDocument(document, proposal.id))
+      this.history.push({
+        id: `history-${proposal.id}-${document.id}-merged`,
+        documentId: document.id,
+        documentVersion: document.version,
+        type: 'merged',
+        summary: `${deleted ? 'Deleted' : 'Published'} ${document.title} through an approved proposal.`,
+        actor: proposal.author.name,
+        createdAt: now,
+        proposalId: proposal.id,
+      })
+    }
   }
 
   public listHistory(): readonly FixtureHistoryEvent[] {
@@ -539,8 +703,9 @@ export class MockVaultStore {
 
   private nextTimestamp(): string {
     this.mutationSequence += 1
-    const seconds = String(30 + this.mutationSequence).padStart(2, '0')
-    return `2026-08-28T12:${seconds}:00.000Z`
+    return new Date(
+      Date.parse('2026-08-28T12:30:00.000Z') + this.mutationSequence * 60_000,
+    ).toISOString()
   }
 }
 
@@ -567,6 +732,8 @@ const contractSummary = (
     order: documentOrder(document, all),
   },
   relationCount: document.relatedDocumentIds.length,
+  folderId: document.folderId,
+  folderPath: document.folderPath.join('/'),
 })
 
 const toDocumentRevision = (revision: StoredRevision): DocumentRevision => ({
@@ -595,7 +762,7 @@ const toDocument = (
       content: revision.body,
       locale: revision.locale,
       folderId: revision.folderId,
-      folderPath: [],
+      folderPath: revision.folderPath,
       kind: revision.kind,
       type: revision.type,
       visibility: revision.visibility,
@@ -617,9 +784,10 @@ const toDocument = (
 const proposalChange = (
   proposal: FixtureProposal,
   file: FixtureProposal['files'][number],
+  allDocuments: readonly FixtureDocument[],
 ): ProposalChange => {
   const target = proposal.targetDocumentId
-    ? documents.find((document) => document.id === proposal.targetDocumentId)
+    ? allDocuments.find((document) => document.id === proposal.targetDocumentId)
     : undefined
   return {
     id: `${proposal.id}:${file.path}`.replace(/[^A-Za-z0-9._:-]+/g, '-'),
@@ -635,7 +803,10 @@ const proposalChange = (
   }
 }
 
-const toProposal = (proposal: FixtureProposal): Proposal =>
+const toProposal = (
+  proposal: FixtureProposal,
+  allDocuments: readonly FixtureDocument[],
+): Proposal =>
   ProposalSchema.parse({
     id: proposal.id,
     title: proposal.title,
@@ -648,7 +819,7 @@ const toProposal = (proposal: FixtureProposal): Proposal =>
     createsDocument:
       proposal.kind === 'create' ||
       proposal.files.some((file) => file.changeType === 'added'),
-    changes: proposal.files.map((file) => proposalChange(proposal, file)),
+    changes: proposal.files.map((file) => proposalChange(proposal, file, allDocuments)),
     checks: proposal.checks.map((check) => ({
       name: check.name,
       status: check.status,
@@ -656,9 +827,45 @@ const toProposal = (proposal: FixtureProposal): Proposal =>
     discussionSummary: proposal.comments.join(' ') || proposal.summary,
   })
 
+const metadataFromDocument = (document: FixtureDocument): DurableProposalMetadata => ({
+  type: documentType(document),
+  folderId: document.folderId,
+  tags: [...document.tags],
+  relations: [...document.relatedDocumentIds],
+  visibility: document.visibility,
+  status: document.status,
+  locale: document.locale,
+})
+
+const proposalHash = async (
+  proposal: Pick<DurableProposal, 'title' | 'summary' | 'reason' | 'changes'>,
+): Promise<string> => {
+  const content = {
+    title: proposal.title,
+    summary: proposal.summary,
+    reason: proposal.reason ?? null,
+    changes: proposal.changes,
+  }
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(JSON.stringify(content)),
+  )
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+const isDurableCreate = (
+  input: CreateProposalInput | DurableCreateProposalInput,
+): boolean =>
+  input.changes.some(
+    (change) =>
+      'metadata' in change || 'baseVersion' in change || !('before' in change),
+  )
+
 export interface MockClients {
-  readonly knowledgeClient: KnowledgeClient
-  readonly proposalClient: ProposalClient
+  readonly knowledgeClient: MockKnowledgeClient
+  readonly proposalClient: MockProposalClient
   readonly store: MockVaultStore
 }
 
@@ -692,9 +899,9 @@ export class MockKnowledgeClient implements KnowledgeClient {
         title: folder.title,
         locale,
         order: folder.order,
-        hasChildren: visibleDocuments.some(
-          (document) => document.folderId === folder.id,
-        ),
+        hasChildren:
+          visibleDocuments.some((document) => document.folderId === folder.id) ||
+          visibleFolders.some((candidate) => candidate.parentId === folder.id),
       })),
       ...visibleDocuments.map((document) => ({
         id: document.id,
@@ -711,14 +918,42 @@ export class MockKnowledgeClient implements KnowledgeClient {
       (left, right) =>
         left.order - right.order || left.title.localeCompare(right.title),
     )
+    const requested =
+      input?.parentId !== undefined
+        ? items.filter((item) => item.parentId === input.parentId)
+        : items
+    const paged =
+      input?.parentId !== undefined ||
+      input?.limit !== undefined ||
+      input?.cursor !== undefined
+    const result = page(
+      requested,
+      input?.cursor,
+      paged ? (input?.limit ?? 20) : requested.length || 1,
+    )
+    const selectedIds = new Set(
+      result.items.filter((item) => item.kind === 'document').map((item) => item.id),
+    )
+    const ancestors: NavigationResponse['items'] = []
+    const seen = new Set<string>()
+    let parentId = items.find((item) => item.documentId === input?.documentId)?.parentId
+    while (parentId && !seen.has(parentId)) {
+      seen.add(parentId)
+      const parent = items.find((item) => item.id === parentId)
+      if (!parent) break
+      ancestors.unshift(parent)
+      parentId = parent.parentId
+    }
     return {
       vault: { id: 'lorestra', name: 'Lorestra Vault', branch: 'main' },
       locale,
-      items,
-      documents: visibleDocuments.map((document) =>
-        contractSummary(document, allDocuments),
-      ),
+      items: result.items,
+      documents: visibleDocuments
+        .filter((document) => selectedIds.has(document.id))
+        .map((document) => contractSummary(document, allDocuments)),
       generatedAt: '2026-08-28T12:00:00.000Z',
+      pageInfo: result.pageInfo,
+      ancestors,
     }
   }
 
@@ -772,11 +1007,24 @@ export class MockKnowledgeClient implements KnowledgeClient {
     const revision = input.version
       ? this.store.findRevision(current.id, input.version)
       : this.store.findRevision(current.id, current.version)
-    if (!revision) return null
+    if (!revision || revision.visibility !== 'public' || revision.status === 'draft')
+      return null
     return {
       document: toDocument(revision, this.store.listDocuments()),
       revision: toDocumentRevision(revision),
     }
+  }
+
+  public async getDocumentById(
+    input: GetDocumentByIdInput,
+  ): Promise<DocumentResponse | null> {
+    const current = this.store.findDocumentById(input.documentId)
+    if (!current || !visible(current)) return null
+    return this.getDocument({
+      slug: current.slug,
+      locale: current.locale,
+      ...(input.version ? { version: input.version } : {}),
+    })
   }
 
   public async getGraph(input?: GraphInput): Promise<GraphResponse> {
@@ -797,6 +1045,7 @@ export class MockKnowledgeClient implements KnowledgeClient {
       const related = new Set([center.id, ...center.relatedDocumentIds])
       selected = publicDocuments.filter((document) => related.has(document.id))
     }
+    if (request.scope === 'related' && !center) selected = []
     const selectedFolderIds = new Set(selected.map((document) => document.folderId))
     const selectedFolders = this.store
       .listFolders()
@@ -814,6 +1063,7 @@ export class MockKnowledgeClient implements KnowledgeClient {
         slug: folder.slug,
         documentType: null,
         locale: folder.locale === 'all' ? null : folder.locale,
+        status: null,
       })),
       ...selected.map((document) => ({
         id: document.id,
@@ -822,6 +1072,7 @@ export class MockKnowledgeClient implements KnowledgeClient {
         slug: document.slug,
         documentType: documentType(document),
         locale: document.locale,
+        status: document.status,
       })),
     ]
     const selectedIds = new Set(selected.map((document) => document.id))
@@ -841,13 +1092,21 @@ export class MockKnowledgeClient implements KnowledgeClient {
           kind: 'related' as const,
         })),
     ])
+    const boundedNodes = nodes.slice(0, 200)
+    const boundedIds = new Set(boundedNodes.map((node) => node.id))
+    const boundedEdges = edges
+      .filter((edge) => boundedIds.has(edge.source) && boundedIds.has(edge.target))
+      .slice(0, 500)
     return {
       scope: request.scope,
       locale: request.locale,
       centerId: center?.id ?? null,
-      nodes,
-      edges,
+      nodes: boundedNodes,
+      edges: boundedEdges,
       generatedAt: '2026-08-28T12:00:00.000Z',
+      truncated:
+        boundedNodes.length !== nodes.length || boundedEdges.length !== edges.length,
+      totals: { nodes: nodes.length, edges: edges.length },
     }
   }
 
@@ -896,6 +1155,8 @@ export class MockKnowledgeClient implements KnowledgeClient {
         score,
         updatedAt: document.updatedAt,
         relationCount: document.relatedDocumentIds.length,
+        folderId: document.folderId,
+        folderPath: document.folderPath.join('/'),
       })),
       pageInfo: result.pageInfo,
       generatedAt: '2026-08-28T12:00:00.000Z',
@@ -912,9 +1173,15 @@ export class MockKnowledgeClient implements KnowledgeClient {
       .filter((event) => {
         if (!event.documentId) return true
         const document = documentsById.get(event.documentId)
+        const revision = this.store.findRevision(
+          event.documentId,
+          event.documentVersion,
+        )
         return (
           document &&
           visible(document) &&
+          (!revision ||
+            (revision.visibility === 'public' && revision.status !== 'draft')) &&
           (!request.locale || document.locale === request.locale)
         )
       })
@@ -959,6 +1226,16 @@ export class MockKnowledgeClient implements KnowledgeClient {
       pageInfo: result.pageInfo,
     }
   }
+
+  public async getHistoryEvent(
+    input: GetHistoryEventInput,
+  ): Promise<HistoryEventResponse | null> {
+    const events = await this.getHistory({
+      limit: this.store.listHistory().length || 1,
+    })
+    const event = events.items.find((item) => item.id === input.eventId)
+    return event ? { event } : null
+  }
 }
 
 function historyCategory(
@@ -973,8 +1250,19 @@ export class MockProposalClient implements ProposalClient {
   public constructor(public readonly store: MockVaultStore = new MockVaultStore()) {}
 
   public async list(input?: ListProposalsInput): Promise<ProposalListResponse> {
-    const records = this.store
-      .listProposals()
+    const legacy = await Promise.all(
+      this.store
+        .listProposals()
+        .map((proposal) => this.get({ proposalId: proposal.id })),
+    )
+    const records = [
+      ...new Map(
+        [
+          ...legacy.filter((item): item is DurableProposal => item !== null),
+          ...this.store.listDurableProposals(),
+        ].map((item) => [item.id, item]),
+      ).values(),
+    ]
       .filter(
         (proposal) =>
           !input?.status || toProposalStatus(proposal.status) === input.status,
@@ -983,7 +1271,7 @@ export class MockProposalClient implements ProposalClient {
     const result = page(records, input?.cursor, input?.limit ?? 20)
     return {
       items: result.items.map((proposal) => {
-        const full = toProposal(proposal)
+        const full = proposal
         return {
           id: full.id,
           title: full.title,
@@ -994,23 +1282,75 @@ export class MockProposalClient implements ProposalClient {
           updatedAt: full.updatedAt,
           changeCount: full.changeCount,
           createsDocument: full.createsDocument,
+          proposalVersion: full.proposalVersion,
+          contentHash: full.contentHash,
         }
       }),
       pageInfo: result.pageInfo,
     }
   }
 
-  public async get(input: GetProposalInput): Promise<Proposal | null> {
+  public async get(input: GetProposalInput): Promise<DurableProposal | null> {
+    const existing = this.store.findDurableProposal(input.proposalId)
+    if (existing) return existing
     const proposal = this.store.findProposal(input.proposalId)
-    return proposal ? toProposal(proposal) : null
+    if (!proposal) return null
+    const current = proposal.targetDocumentId
+      ? this.store.findDocumentById(proposal.targetDocumentId)
+      : undefined
+    const response = toProposal(proposal, this.store.listDocuments())
+    const changes = response.changes.map((change) => ({
+      ...change,
+      baseVersion: proposal.baseVersion,
+      metadata: {
+        type: current ? documentType(current) : ('note' as const),
+        folderId: proposal.proposed.folderId,
+        tags: [...proposal.proposed.tags],
+        relations: [...proposal.proposed.relatedDocumentIds],
+        visibility: current?.visibility ?? ('public' as const),
+        status: current?.status ?? ('published' as const),
+        locale: proposal.proposed.locale,
+      },
+      beforeMetadata: current ? metadataFromDocument(current) : null,
+      beforeTarget: current
+        ? { documentId: current.id, slug: current.slug, title: current.title }
+        : null,
+    }))
+    const contentHash = await proposalHash({ ...response, changes })
+    const durable = DurableProposalSchema.parse({
+      ...response,
+      changes,
+      proposalVersion:
+        proposal.status === 'approved' || proposal.status === 'merged' ? 2 : 1,
+      contentHash,
+      approval:
+        proposal.status === 'approved' || proposal.status === 'merged'
+          ? {
+              reviewedProposalVersion: 1,
+              contentHash,
+              reviewedBy: author(proposal.reviewers[0] ?? 'local-reviewer'),
+              reviewedAt: proposal.updatedAt,
+            }
+          : null,
+    })
+    const concurrent = this.store.findDurableProposal(proposal.id)
+    if (concurrent) return concurrent
+    this.store.saveDurableProposal(durable)
+    return clone(durable)
   }
 
   /** Creates a proposal only; the published document changes on merge. */
-  public async create(input: CreateProposalInput): Promise<Proposal> {
-    return this.createForTests(input)
+  public async create(
+    input: CreateProposalInput | DurableCreateProposalInput,
+  ): Promise<DurableProposal> {
+    return this.store.mutate(async () => {
+      if (isDurableCreate(input))
+        return this.createDurable(DurableCreateProposalInputSchema.parse(input))
+      return this.createForTests(input as CreateProposalInput)
+    })
   }
 
-  public async createForTests(input: CreateProposalInput): Promise<Proposal> {
+  public async createForTests(input: CreateProposalInput): Promise<DurableProposal> {
     const parsed = CreateProposalInputSchema.parse(input)
     const target = parsed.changes[0]?.target
     const targetDocument = target?.documentId
@@ -1026,8 +1366,15 @@ export class MockProposalClient implements ProposalClient {
       targetDocument?.folderId ??
       (locale === 'pt-BR' ? 'folder.docs.pt-br' : 'folder.docs.en')
     const now = '2026-08-28T12:10:00.000Z'
+    const allIds = new Set(
+      [...this.store.listProposals(), ...this.store.listDurableProposals()].map(
+        (item) => item.id,
+      ),
+    )
+    let sequence = allIds.size + 1
+    while (allIds.has(`proposal-local-${sequence}`)) sequence += 1
     const proposal: FixtureProposal = {
-      id: `proposal-local-${this.store.listProposals().length + 1}`,
+      id: `proposal-local-${sequence}`,
       title: parsed.title,
       summary: parsed.summary,
       targetDocumentId: target?.documentId ?? null,
@@ -1069,17 +1416,187 @@ export class MockProposalClient implements ProposalClient {
       })),
       comments: [],
     }
-    return toProposal(this.store.addProposal(proposal))
+    this.store.addProposal(proposal)
+    const created = await this.get({ proposalId: proposal.id })
+    if (!created) throw new MockVaultError('not_found', 'Created proposal not found.')
+    return created
   }
 
-  public async transition(input: ProposalTransitionInput): Promise<Proposal> {
-    const parsed = ProposalTransitionInputSchema.parse(input)
-    const target = fromProposalStatus(parsed.status)
-    const proposal =
-      target === 'merged'
-        ? this.store.mergeProposal(parsed.proposalId)
-        : this.store.updateProposalStatus(parsed.proposalId, target, parsed.reason)
-    return toProposal(proposal)
+  public async transition(
+    input: ProposalTransitionInput | DurableProposalTransitionInput,
+  ): Promise<DurableProposal> {
+    return this.store.mutate(async () => {
+      const strict =
+        'expectedProposalVersion' in input ||
+        'confirmation' in input ||
+        this.store.requiresDurablePreconditions(input.proposalId)
+      const durableInput = strict
+        ? DurableProposalTransitionInputSchema.parse(input)
+        : undefined
+      const parsed = durableInput ?? ProposalTransitionInputSchema.parse(input)
+      const current = await this.get({ proposalId: parsed.proposalId })
+      if (!current) throw new MockVaultError('not_found', 'Proposal not found.')
+      if (durableInput)
+        this.assertProposalVersion(current, durableInput.expectedProposalVersion)
+      if (!canTransitionProposal(current.status, parsed.status))
+        throw new MockVaultError(
+          'invalid_transition',
+          `Cannot transition proposal from ${current.status} to ${parsed.status}.`,
+        )
+      if (parsed.status === 'merged') {
+        if (current.checks.some((check) => check.status !== 'passed'))
+          throw new MockVaultError(
+            'invalid_transition',
+            'All proposal checks must pass before merge.',
+          )
+        if (
+          !current.approval ||
+          current.approval.contentHash !== current.contentHash ||
+          current.approval.reviewedProposalVersion !== current.proposalVersion - 1
+        )
+          throw new MockVaultError(
+            'version_conflict',
+            'Approval does not match this content.',
+            409,
+          )
+        if (
+          durableInput?.confirmation &&
+          durableInput.confirmation.contentHash !== current.contentHash
+        )
+          throw new MockVaultError(
+            'proposal_version_conflict',
+            'Merge confirmation is stale.',
+            409,
+          )
+        if (!strict && this.store.findProposal(current.id))
+          this.store.mergeProposal(current.id)
+        else this.store.publishDurableProposal(current)
+      } else if (!strict && this.store.findProposal(current.id)) {
+        this.store.updateProposalStatus(
+          current.id,
+          fromProposalStatus(parsed.status),
+          parsed.reason,
+        )
+      }
+      const now = new Date().toISOString()
+      const updated: DurableProposal = {
+        ...current,
+        status: parsed.status,
+        proposalVersion: current.proposalVersion + 1,
+        updatedAt: now,
+        approval:
+          parsed.status === 'approved'
+            ? {
+                reviewedProposalVersion: current.proposalVersion,
+                contentHash: current.contentHash,
+                reviewedBy: author('local-reviewer'),
+                reviewedAt: now,
+              }
+            : parsed.status === 'changes_requested'
+              ? null
+              : current.approval,
+        discussionSummary: parsed.reason
+          ? `${current.discussionSummary}\n${parsed.reason}`.slice(-2000)
+          : current.discussionSummary,
+      }
+      this.store.saveDurableProposal(updated, strict)
+      return clone(updated)
+    })
+  }
+
+  public async update(input: DurableUpdateProposalInput): Promise<DurableProposal> {
+    return this.store.mutate(async () => {
+      const parsed = DurableUpdateProposalInputSchema.parse(input)
+      const current = await this.get({ proposalId: parsed.proposalId })
+      if (!current) throw new MockVaultError('not_found', 'Proposal not found.')
+      this.assertProposalVersion(current, parsed.expectedProposalVersion)
+      if (!canEditProposal(current.status))
+        throw new MockVaultError(
+          'invalid_transition',
+          'Merged proposals cannot be edited.',
+        )
+      const next = await this.buildDurable(parsed, {
+        ...current,
+        proposalVersion: current.proposalVersion + 1,
+      })
+      this.store.saveDurableProposal(next, true)
+      return clone(next)
+    })
+  }
+
+  private async createDurable(
+    input: DurableCreateProposalInput,
+  ): Promise<DurableProposal> {
+    const allIds = new Set(
+      [...this.store.listProposals(), ...this.store.listDurableProposals()].map(
+        (item) => item.id,
+      ),
+    )
+    let sequence = allIds.size + 1
+    while (allIds.has(`proposal-local-${sequence}`)) sequence += 1
+    const now = new Date().toISOString()
+    const created = await this.buildDurable(input, {
+      id: `proposal-local-${sequence}`,
+      proposalVersion: 1,
+      author: author('local-contributor'),
+      createdAt: now,
+      discussionSummary: input.summary,
+    })
+    this.store.saveDurableProposal(created, true)
+    return clone(created)
+  }
+
+  private async buildDurable(
+    input: DurableCreateProposalInput,
+    identity: Pick<
+      DurableProposal,
+      'id' | 'proposalVersion' | 'author' | 'createdAt' | 'discussionSummary'
+    >,
+  ): Promise<DurableProposal> {
+    this.store.validateDurableChanges(input.changes)
+    const changes = input.changes.map((change) => {
+      const current = change.target.documentId
+        ? this.store.findDocumentById(change.target.documentId)
+        : undefined
+      return {
+        ...change,
+        before: current?.content ?? null,
+        beforeMetadata: current ? metadataFromDocument(current) : null,
+        beforeTarget: current
+          ? { documentId: current.id, slug: current.slug, title: current.title }
+          : null,
+      }
+    })
+    const content = {
+      title: input.title,
+      summary: input.summary,
+      ...(input.reason ? { reason: input.reason } : {}),
+      changes,
+    }
+    return DurableProposalSchema.parse({
+      id: identity.id,
+      proposalVersion: identity.proposalVersion,
+      author: identity.author,
+      createdAt: identity.createdAt,
+      discussionSummary: identity.discussionSummary,
+      ...content,
+      status: 'open',
+      approval: null,
+      contentHash: await proposalHash(content),
+      updatedAt: new Date().toISOString(),
+      changeCount: changes.length,
+      createsDocument: changes.some((change) => change.changeType === 'added'),
+      checks: [{ name: 'Contract validation', status: 'passed' }],
+    })
+  }
+
+  private assertProposalVersion(proposal: DurableProposal, expected: number): void {
+    if (proposal.proposalVersion !== expected)
+      throw new MockVaultError(
+        'proposal_version_conflict',
+        'The proposal changed. Reload before trying again.',
+        409,
+      )
   }
 }
 

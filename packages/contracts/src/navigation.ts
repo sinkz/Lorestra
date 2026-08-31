@@ -1,6 +1,13 @@
 import { z } from 'zod'
 
-import { IdSchema, IsoDateTimeSchema, LocaleSchema, SlugSchema } from './common.js'
+import {
+  IdSchema,
+  IsoDateTimeSchema,
+  LocaleSchema,
+  SlugSchema,
+  PageInfoSchema,
+  PaginationInputSchema,
+} from './common.js'
 import { DocumentSummarySchema } from './document.js'
 
 export const NavigationItemKindSchema = z.enum(['folder', 'document'])
@@ -21,6 +28,10 @@ export type NavigationItem = z.infer<typeof NavigationItemSchema>
 
 export const NavigationInputSchema = z.object({
   locale: LocaleSchema.default('en'),
+  parentId: IdSchema.nullable().optional(),
+  documentId: IdSchema.optional(),
+  cursor: PaginationInputSchema.shape.cursor,
+  limit: PaginationInputSchema.shape.limit.unwrap().optional(),
 })
 export type NavigationInput = z.infer<typeof NavigationInputSchema>
 
@@ -34,5 +45,7 @@ export const NavigationResponseSchema = z.object({
   items: z.array(NavigationItemSchema),
   documents: z.array(DocumentSummarySchema),
   generatedAt: IsoDateTimeSchema,
+  pageInfo: PageInfoSchema.optional(),
+  ancestors: z.array(NavigationItemSchema).optional(),
 })
 export type NavigationResponse = z.infer<typeof NavigationResponseSchema>

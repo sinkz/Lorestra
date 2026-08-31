@@ -1,6 +1,11 @@
 import { z } from 'zod'
 
-import { IdSchema, IsoDateTimeSchema, LocaleSchema } from './common.js'
+import {
+  IdSchema,
+  IsoDateTimeSchema,
+  LocaleSchema,
+  PublicationStatusSchema,
+} from './common.js'
 import { DocumentTypeSchema } from './document.js'
 
 export const GraphScopeSchema = z.enum(['entire', 'folder', 'related'])
@@ -24,6 +29,7 @@ export const GraphNodeSchema = z.object({
   slug: z.string().nullable(),
   documentType: DocumentTypeSchema.nullable(),
   locale: LocaleSchema.nullable(),
+  status: PublicationStatusSchema.nullable().optional(),
 })
 export type GraphNode = z.infer<typeof GraphNodeSchema>
 
@@ -45,5 +51,12 @@ export const GraphResponseSchema = z.object({
   nodes: z.array(GraphNodeSchema).max(200),
   edges: z.array(GraphEdgeSchema).max(500),
   generatedAt: IsoDateTimeSchema,
+  truncated: z.boolean().optional(),
+  totals: z
+    .object({
+      nodes: z.number().int().nonnegative(),
+      edges: z.number().int().nonnegative(),
+    })
+    .optional(),
 })
 export type GraphResponse = z.infer<typeof GraphResponseSchema>

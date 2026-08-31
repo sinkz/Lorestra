@@ -1,4 +1,87 @@
 const ptBR = {
+  apiErrors: {
+    offline:
+      'Conexão perdida. Seu rascunho não enviado continua aqui. Repita a mesma operação quando reconectar.',
+    unauthorized: 'Sua sessão expirou. Entre novamente para continuar.',
+    forbidden: 'Sua sessão atual não tem permissão para esta operação.',
+    notFound: 'Este item está indisponível ou não está mais visível.',
+    conflict: 'A versão mudou enquanto você editava. Nada foi sobrescrito.',
+    tooLarge:
+      'Esta alteração excede o limite do vault. Reduza o conteúdo e tente novamente.',
+    rateLimited:
+      'O vault está limitando requisições temporariamente. Preserve o rascunho e tente depois.',
+    unavailable:
+      'A escrita está temporariamente indisponível. Seu rascunho não foi publicado.',
+    invalid: 'Confira os metadados, limites e campos obrigatórios.',
+    reference: 'Referência da requisição: {{id}}',
+  },
+  session: {
+    local: 'Sessão local de desenvolvimento',
+    mock: 'Demonstração em memória',
+    shared: 'Vault compartilhado',
+    visitor: 'Visitante somente leitura',
+    signIn: 'Entrar',
+    signOut: 'Sair',
+    localToken: 'Token da sessão local',
+    localHelp:
+      'Cole o token da configuração local do operador. Ele é trocado por um cookie HttpOnly e nunca é salvo no armazenamento do navegador.',
+    readOnly: 'Vault somente leitura',
+    role: 'Papel: {{role}}',
+  },
+  editor: {
+    proposalId: 'ID da proposta',
+    contentHash: 'Hash do conteúdo revisado (SHA-256)',
+    types: {
+      note: 'Nota',
+      lesson: 'Lição',
+      decision: 'Decisão',
+      incident: 'Incidente',
+      process: 'Processo',
+      document: 'Documento',
+    },
+    loadedCount: '{{count}} documentos carregados; este ramo pode conter mais itens',
+    versionConflict:
+      'Sua versão base do documento: v{{base}}. Versão atual: v{{current}}.',
+    proposalConflict:
+      'Sua versão base da proposta: v{{base}}. Versão atual: v{{current}}.',
+    metadataFields: {
+      type: 'Tipo',
+      folderId: 'Pasta',
+      tags: 'Tags',
+      relations: 'Referências',
+      visibility: 'Visibilidade',
+      status: 'Estado editorial',
+      locale: 'Idioma',
+    },
+    summary: 'Resumo da proposta',
+    metadata: 'Metadados do documento',
+    documentTitle: 'Título do documento',
+    visibility: 'Visibilidade',
+    public: 'Público',
+    internal: 'Interno',
+    relations: 'IDs das referências',
+    commaSeparated: 'Valores separados por vírgulas',
+    operation: 'Operação da alteração',
+    modify: 'Modificar documento',
+    delete: 'Excluir documento (após merge)',
+    editProposal: 'Editar proposta',
+    resubmit: 'Salvar e reenviar',
+    proposalVersion: 'Versão {{version}} da proposta',
+    baseVersion: 'Baseado no documento v{{version}}.',
+    confirmMerge: 'Confirmar merge',
+    mergeExplanation:
+      'Publicar “{{title}}”, versão {{version}} da proposta? Esta confirmação vale somente para a versão revisada.',
+    conflictHelp:
+      'Seu rascunho foi preservado. Abra o documento atual em outra aba, compare as versões e inicie outra proposta a partir dessa revisão. A versão base nunca é avançada silenciosamente.',
+    unsent: 'Rascunho não enviado. As alterações aqui não estão salvas no vault.',
+    saveLocal: 'Salvar rascunho neste dispositivo',
+    restoreLocal: 'Restaurar rascunho local',
+    savedLocally: 'Salvo somente neste dispositivo. Não enviado ao vault.',
+    discard: 'Descartar este rascunho não enviado?',
+    graphLimited: 'Grafo limitado. Reduza o escopo para explorar mais.',
+    loadMore: 'Carregar mais',
+    loadingFolder: 'Carregando pasta…',
+  },
   brand: { subtitle: 'Conhecimento vivo' },
   nav: {
     atlas: 'Atlas',
@@ -219,7 +302,7 @@ const ptBR = {
     contents: 'Conteúdo',
     agentReady: 'Conhecimento nativo em WebMCP',
     agentReadyBody:
-      'Pessoas recebem um workspace bilíngue e tranquilo. Agentes ganham dez ferramentas tipadas para descoberta, leitura, grafo, propostas e histórico.',
+      'Pessoas recebem um workspace bilíngue e tranquilo. Agentes ganham onze ferramentas tipadas para descoberta, leitura, grafo, propostas e histórico.',
   },
   common: {
     loading: 'Carregando…',

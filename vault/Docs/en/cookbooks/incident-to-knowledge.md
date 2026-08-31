@@ -2,7 +2,7 @@
 id: lorestra.docs.cookbook-incident.en
 slug: cookbook-incident-to-knowledge
 locale: en
-title: Cookbook: incident to reusable knowledge
+title: 'Cookbook: incident to reusable knowledge'
 description: Turn an incident timeline into a small, verifiable runbook.
 folderId: folder.docs.en
 visibility: public
@@ -12,7 +12,8 @@ createdAt: 2026-08-02T09:00:00.000Z
 updatedAt: 2026-08-21T09:00:00.000Z
 author: Reliability guild
 tags: [cookbook, incident, operations]
-relatedDocumentIds: [lorestra.engineering.incident-response, lorestra.docs.security-governance.en]
+relatedDocumentIds:
+  [lorestra.engineering.incident-response, lorestra.docs.security-governance.en]
 nav:
   visible: true
   parentId: folder.docs.en

@@ -2,6 +2,8 @@ import { createContext, useContext, type PropsWithChildren } from 'react'
 import type {
   Document as ContractDocument,
   DocumentRevision,
+  DurableProposalClient,
+  RequestOptions,
   DocumentSummary as ContractDocumentSummary,
   GraphResponse,
   HistoryEvent as ContractHistoryEvent,
@@ -91,7 +93,7 @@ function mapDocumentSummary(
     title: document.title,
     summary: document.excerpt,
     folderId,
-    folderPath: folderPath(folderId, folders),
+    folderPath: document.folderPath ?? folderPath(folderId, folders),
     kind: documentKind(document.type, document.tags),
     status: document.status,
     locale: document.locale,
@@ -100,6 +102,7 @@ function mapDocumentSummary(
     version: document.version,
     tags: [...document.tags],
     relationCount: document.relationCount,
+    visibility: document.visibility,
   }
 }
 
@@ -123,6 +126,7 @@ function buildFolderTree(
       documentCount: documents.filter((document) => document.folderId === item.id)
         .length,
       children: [],
+      hasChildren: item.hasChildren,
     })
   }
   const folderItemsById = new Map(folderItems.map((item) => [item.id, item]))
@@ -140,7 +144,7 @@ function buildFolderTree(
 
 export function mapNavigation(response: NavigationResponse): NavigationData {
   const folders = new Map(
-    response.items
+    [...(response.ancestors ?? []), ...response.items]
       .filter((item) => item.kind === 'folder')
       .map((item) => [item.id, item]),
   )
@@ -151,6 +155,8 @@ export function mapNavigation(response: NavigationResponse): NavigationData {
     vault: response.vault,
     folders: buildFolderTree(response.items, documents),
     documents,
+    pageInfo: response.pageInfo,
+    partial: Boolean(response.pageInfo),
   }
 }
 
@@ -201,7 +207,7 @@ function mapDocument(
   }
 }
 
-function mapGraph(response: GraphResponse, navigation: NavigationData): GraphSnapshot {
+function mapGraph(response: GraphResponse, navigation?: NavigationData): GraphSnapshot {
   const folders = response.nodes.filter((node) => node.kind === 'folder')
   const folderIndex = new Map(folders.map((node, index) => [node.id, index]))
   const parentByDocument = new Map(
@@ -212,7 +218,7 @@ function mapGraph(response: GraphResponse, navigation: NavigationData): GraphSna
   const childIndex = new Map<string, number>()
   return {
     nodes: response.nodes.map((node) => {
-      const document = navigation.documents.find((item) => item.id === node.id)
+      const document = navigation?.documents.find((item) => item.id === node.id)
       const parentId = parentByDocument.get(node.id)
       const parentPosition = parentId ? (folderIndex.get(parentId) ?? 0) : 0
       const indexWithinParent = parentId ? (childIndex.get(parentId) ?? 0) : 0
@@ -224,7 +230,8 @@ function mapGraph(response: GraphResponse, navigation: NavigationData): GraphSna
           node.kind === 'folder'
             ? 'folder'
             : (document?.kind ?? documentKind(node.documentType ?? 'note')),
-        status: document?.status ?? 'published',
+        status: node.status ?? document?.status ?? 'published',
+        slug: node.slug ?? undefined,
         x:
           node.kind === 'folder'
             ? 70 + (folderIndex.get(node.id) ?? 0) * 310
@@ -232,6 +239,7 @@ function mapGraph(response: GraphResponse, navigation: NavigationData): GraphSna
         y: node.kind === 'folder' ? 20 : 160 + Math.floor(indexWithinParent / 2) * 132,
       }
     }),
+    truncated: response.truncated,
     edges: response.edges.map((edge) => ({
       id: edge.id,
       source: edge.source,
@@ -249,10 +257,14 @@ function mapSearchResult(
   return {
     id: result.id,
     slug: result.slug,
+    status: result.status,
+    locale: result.locale,
+    updatedAt: result.updatedAt,
+    relationCount: result.relationCount,
     title: result.title,
     excerpt: result.excerpt,
     kind: document?.kind ?? documentKind(result.type),
-    folderPath: document?.folderPath ?? 'Unsorted',
+    folderPath: result.folderPath ?? document?.folderPath ?? 'Unsorted',
     score: result.score,
   }
 }
@@ -286,7 +298,7 @@ function diffLines(change: ProposalChange): DiffLine[] {
 
 function proposalNumber(id: string): number {
   const numeric = Number.parseInt(id.replace(/\D/g, ''), 10)
-  if (Number.isFinite(numeric) && numeric > 0) return numeric
+  if (Number.isSafeInteger(numeric) && numeric > 0 && numeric <= 999_999) return numeric
   return [...id].reduce((sum, character) => sum + character.charCodeAt(0), 0) % 1000
 }
 
@@ -299,6 +311,7 @@ function mapProposalSummary(summary: ProposalSummary): Proposal {
     body: summary.summary,
     status: proposalStatus(summary.status),
     author: summary.author.name,
+    authorId: summary.author.id,
     createdAt: summary.createdAt,
     updatedAt: summary.updatedAt,
     changeCount: summary.changeCount,
@@ -309,7 +322,7 @@ function mapProposalSummary(summary: ProposalSummary): Proposal {
   }
 }
 
-export type ProposalFileMetadata = {
+type ProposalFileMetadata = {
   path: string
   changeType: 'added' | 'modified' | 'deleted'
 }
@@ -324,6 +337,20 @@ function mapProposal(
     return {
       path: metadata?.path ?? change.path,
       documentId: change.target.documentId ?? undefined,
+      slug: change.target.slug,
+      beforeMetadata: change.beforeMetadata,
+      change:
+        change.metadata && change.baseVersion !== undefined
+          ? {
+              id: change.id,
+              target: change.target,
+              changeType: change.changeType,
+              baseVersion: change.baseVersion,
+              after: change.after,
+              metadata: change.metadata,
+              ...(change.path ? { path: change.path } : {}),
+            }
+          : undefined,
       changeType: change.changeType,
       additions: diff.filter((line) => line.type === 'add').length,
       deletions: diff.filter((line) => line.type === 'remove').length,
@@ -333,6 +360,9 @@ function mapProposal(
   return {
     ...mapProposalSummary(proposal),
     body: proposal.discussionSummary,
+    reason: proposal.discussionSummary,
+    proposalVersion: proposal.proposalVersion,
+    contentHash: proposal.contentHash,
     files,
     checks: proposal.checks.map((check, index) => ({
       id: `${proposal.id}-check-${index + 1}`,
@@ -348,6 +378,7 @@ function mapProposal(
 function mapHistoryEvent(event: ContractHistoryEvent): HistoryEvent {
   const type: HistoryEvent['type'] =
     event.type === 'proposal_created' ||
+    event.type === 'proposal_updated' ||
     event.type === 'changes_requested' ||
     event.type === 'approved' ||
     event.type === 'merged'
@@ -372,18 +403,81 @@ function mapHistoryEvent(event: ContractHistoryEvent): HistoryEvent {
 }
 
 export function createKnowledgeAdapter(client: KnowledgeClient): AppKnowledgeClient {
-  const getNavigation = (locale: Locale): Promise<NavigationData> => {
-    return client.getNavigation({ locale }).then(mapNavigation)
+  const getNavigation = (
+    locale: Locale,
+    options?: RequestOptions,
+  ): Promise<NavigationData> =>
+    client.getNavigation({ locale }, options).then(mapNavigation)
+  const readDocument = async (
+    response: {
+      document: ContractDocument
+      revision: DocumentRevision
+      resolvedLinks?: Array<{ href: string; slug: string }>
+    } | null,
+    options?: RequestOptions,
+  ) => {
+    if (!response) return null
+    // Only the bounded neighborhood is needed for backlinks, never the whole vault.
+    const graph = await client.getGraph(
+      {
+        scope: 'related',
+        documentId: response.document.id,
+        locale: response.document.locale,
+      },
+      options,
+    )
+    return {
+      ...mapDocument(
+        response.document,
+        response.revision,
+        { vault: { id: '', name: '', branch: '' }, folders: [], documents: [] },
+        graph,
+      ),
+      resolvedLinks: response.resolvedLinks,
+      metadata: response.document.nav.parentId
+        ? {
+            type: response.document.type,
+            locale: response.document.locale,
+            folderId: response.document.nav.parentId,
+            tags: response.document.tags,
+            relations: response.document.relations,
+            status: response.document.status,
+            visibility: response.document.visibility,
+          }
+        : undefined,
+      relatedDocuments: graph.nodes
+        .filter(
+          (node) =>
+            node.kind === 'document' && node.id !== response.document.id && node.slug,
+        )
+        .map((node) => ({
+          id: node.id,
+          slug: node.slug!,
+          title: node.label,
+          kind: documentKind(node.documentType ?? 'note'),
+          status: node.status ?? 'published',
+          folderPath: '',
+        })),
+    }
   }
   return {
-    getNavigation(input) {
-      return getNavigation(input?.locale ?? 'en')
+    getNavigation(input, options) {
+      return client
+        .getNavigation(
+          {
+            locale: input?.locale ?? 'en',
+            parentId: input?.parentId ?? input?.folderId,
+            cursor: input?.cursor,
+            limit: input?.limit,
+          },
+          options,
+        )
+        .then(mapNavigation)
     },
-    async listDocuments(input) {
-      const locale = input?.locale ?? 'en'
-      const [response, navigation] = await Promise.all([
-        client.listDocuments({
-          locale,
+    async listDocuments(input, options) {
+      const response = await client.listDocuments(
+        {
+          locale: input?.locale ?? 'en',
           folderId: input?.folderId,
           q: input?.query || undefined,
           type: input?.kind ? contractDocumentType(input.kind) : undefined,
@@ -391,73 +485,75 @@ export function createKnowledgeAdapter(client: KnowledgeClient): AppKnowledgeCli
           sort: input?.sort === 'kind' ? 'type' : (input?.sort ?? 'updated'),
           cursor: input?.cursor,
           limit: input?.limit ?? 50,
-        }),
-        getNavigation(locale),
-      ])
-      const folders = new Map(
-        navigation.folders.flatMap(function collect(folder): Array<
-          [string, NavigationItem]
-        > {
-          const item: NavigationItem = {
-            id: folder.id,
-            parentId: folder.parentId ?? null,
-            kind: 'folder',
-            documentId: null,
-            slug: folder.id,
-            title: folder.name,
-            locale,
-            order: 0,
-            hasChildren: folder.children.length > 0 || folder.documentCount > 0,
-          }
-          return [[folder.id, item], ...folder.children.flatMap(collect)]
-        }),
+        },
+        options,
       )
       return {
-        items: response.items.map((document) => mapDocumentSummary(document, folders)),
+        items: response.items.map((document) =>
+          mapDocumentSummary(document, new Map()),
+        ),
         pageInfo: mapPageInfo(response.pageInfo),
       } satisfies DocumentListData
     },
-    async getDocument(input) {
-      const locale = input.locale ?? 'en'
-      const response = await client.getDocument({
-        slug: input.slug,
-        locale,
-        version: input.version,
-      })
-      if (!response) return null
-      const [navigation, graph] = await Promise.all([
-        getNavigation(locale),
-        client.getGraph({ scope: 'entire', locale }),
-      ])
-      return mapDocument(response.document, response.revision, navigation, graph)
+    async getDocument(input, options) {
+      return readDocument(
+        await client.getDocument({ ...input, locale: input.locale ?? 'en' }, options),
+        options,
+      )
     },
-    async getGraph(input) {
-      const locale = input.locale ?? 'en'
-      const [response, navigation] = await Promise.all([
-        client.getGraph({ ...input, locale }),
-        getNavigation(locale),
-      ])
-      return mapGraph(response, navigation)
+    async getDocumentById(input, options) {
+      if (client.getDocumentById)
+        return readDocument(
+          await client.getDocumentById(
+            { documentId: input.documentId, version: input.version },
+            options,
+          ),
+          options,
+        )
+      // Compatibility only for the explicitly selected legacy mock adapter.
+      const navigation = await getNavigation(input.locale ?? 'en', options)
+      const document = navigation.documents.find((item) => item.id === input.documentId)
+      return document
+        ? this.getDocument(
+            { slug: document.slug, locale: input.locale, version: input.version },
+            options,
+          )
+        : null
     },
-    async search(input) {
-      const locale = input.locale ?? 'en'
-      const [response, navigation] = await Promise.all([
-        client.search({ q: input.query, locale, limit: input.limit ?? 8 }),
-        getNavigation(locale),
-      ])
+    async getGraph(input, options) {
+      return mapGraph(
+        await client.getGraph({ ...input, locale: input.locale ?? 'en' }, options),
+      )
+    },
+    async search(input, options) {
+      const response = await client.search(
+        {
+          q: input.query,
+          locale: input.locale ?? 'en',
+          limit: input.limit ?? 8,
+          cursor: input.cursor,
+        },
+        options,
+      )
       return {
-        results: response.items.map((result) => mapSearchResult(result, navigation)),
-        total: response.items.length,
+        results: response.items.map((result) =>
+          mapSearchResult(result, {
+            vault: { id: '', name: '', branch: '' },
+            folders: [],
+            documents: [],
+          }),
+        ),
+        total: response.pageInfo.totalCount,
+        pageInfo: response.pageInfo,
       } satisfies SearchData
     },
-    async getHistory(input) {
-      const locale = input?.locale ?? 'en'
-      const [response, navigation] = await Promise.all([
-        client.getHistory({
+    async getHistory(input, options) {
+      const response = await client.getHistory(
+        {
           documentId: input?.documentId,
           cursor: input?.cursor,
           limit: input?.limit ?? 30,
-          locale,
+          locale: input?.locale ?? 'en',
           q: input?.query || undefined,
           category:
             input?.type === 'proposal' ||
@@ -465,104 +561,76 @@ export function createKnowledgeAdapter(client: KnowledgeClient): AppKnowledgeCli
             input?.type === 'create'
               ? input.type
               : undefined,
-        }),
-        getNavigation(locale),
-      ])
-      const documentIds = new Set(navigation.documents.map((document) => document.id))
-      const events = response.items
-        .map(mapHistoryEvent)
-        .filter(
-          (event) =>
-            !event.documentId ||
-            !event.documentSlug ||
-            documentIds.has(event.documentId),
-        )
+        },
+        options,
+      )
       return {
         branch: 'main',
         totalVersions: response.pageInfo.totalCount,
-        events,
-        pageInfo: mapPageInfo(response.pageInfo),
+        events: response.items.map(mapHistoryEvent),
+        pageInfo: response.pageInfo,
       } satisfies HistoryData
+    },
+    async getHistoryEvent(input, options) {
+      if (client.getHistoryEvent) {
+        const event = await client.getHistoryEvent(input, options)
+        return event ? mapHistoryEvent(event.event) : null
+      }
+      const history = await this.getHistory(
+        { locale: input.locale, limit: 100 },
+        options,
+      )
+      return history.events.find((event) => event.id === input.eventId) ?? null
     },
   }
 }
 
 type ProposalAdapterOptions = {
   resolveFiles?: (proposalId: string) => readonly ProposalFileMetadata[] | undefined
-  resolveDocument?: (
-    documentId: string,
-    locale?: Locale,
-  ) =>
-    | { slug: string; title: string }
-    | undefined
-    | Promise<{ slug: string; title: string } | undefined>
 }
 
 export function createProposalAdapter(
-  client: ProposalClient,
+  client: ProposalClient | DurableProposalClient,
   options: ProposalAdapterOptions = {},
 ): AppProposalClient {
   return {
-    async list(input) {
+    async list(input, requestOptions) {
       const status =
         input?.status && input.status !== 'all'
           ? input.status === 'changes-requested'
             ? 'changes_requested'
             : input.status
           : undefined
-      const response = await client.list({
-        status,
-        cursor: input?.cursor,
-        limit: input?.limit ?? 30,
-      })
+      const response = await client.list(
+        { status, cursor: input?.cursor, limit: input?.limit ?? 30 },
+        requestOptions,
+      )
       return {
         items: response.items.map(mapProposalSummary),
         pageInfo: mapPageInfo(response.pageInfo),
       } satisfies ProposalListData
     },
-    async get(input) {
-      const proposal = await client.get({ proposalId: input.proposalId })
+    async get(input, requestOptions) {
+      const proposal = await client.get(
+        { proposalId: input.proposalId },
+        requestOptions,
+      )
       return proposal
         ? mapProposal(proposal, options.resolveFiles?.(proposal.id))
         : null
     },
-    async create(input) {
-      const targetDocument = input.documentId
-        ? await options.resolveDocument?.(input.documentId, input.locale)
-        : undefined
-      const targetTitle = targetDocument?.title ?? input.title
-      const proposal = await client.create({
-        title: input.title,
-        summary: input.body.slice(0, 500) || input.title,
-        locale: input.locale,
-        changes: [
-          {
-            id: `change-${Date.now()}`,
-            target: {
-              documentId: input.documentId ?? null,
-              slug: (targetDocument?.slug ?? input.title)
-                .toLowerCase()
-                .normalize('NFD')
-                .replace(/[\u0300-\u036f]/g, '')
-                .replace(/[^a-z0-9]+/g, '-')
-                .replace(/^-|-$/g, ''),
-              title: targetTitle,
-            },
-            changeType: input.documentId ? 'modified' : 'added',
-            before: null,
-            after: input.body,
-          },
-        ],
-      })
+    async create(input, requestOptions) {
+      const proposal = await client.create(input, requestOptions!)
       return mapProposal(proposal, options.resolveFiles?.(proposal.id))
     },
-    async transition(input) {
-      const proposal = await client.transition({
-        proposalId: input.proposalId,
-        status:
-          input.status === 'changes-requested' ? 'changes_requested' : input.status,
-        reason: input.reason,
-      })
+    async update(input, requestOptions) {
+      if (!client.update)
+        throw new Error('Proposal update is not available in this adapter.')
+      const proposal = await client.update(input, requestOptions!)
+      return mapProposal(proposal, options.resolveFiles?.(proposal.id))
+    },
+    async transition(input, requestOptions) {
+      const proposal = await client.transition(input, requestOptions!)
       return mapProposal(proposal, options.resolveFiles?.(proposal.id))
     },
   }

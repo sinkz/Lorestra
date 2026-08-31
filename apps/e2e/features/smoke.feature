@@ -152,7 +152,7 @@ Feature: Lorestra knowledge workflow
     And I merge the proposal into the vault
     Then the proposal status is "Merged"
     When I open vault history
-    Then history contains "creating v2"
+    Then history contains "Published Using Lorestra through an approved proposal."
     And history contains "Published as revision 2"
 
   Scenario: Read bilingual vault documentation

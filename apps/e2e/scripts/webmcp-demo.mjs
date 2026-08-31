@@ -39,8 +39,8 @@ try {
       'WebMCP is unavailable. Use a compatible browser and enable its WebMCP support.',
     )
   }
-  if (evidence.registeredTools !== 10) {
-    throw new Error(`Expected 10 Lorestra tools, got ${evidence.registeredTools}.`)
+  if (evidence.registeredTools !== 11) {
+    throw new Error(`Expected 11 Lorestra tools, got ${evidence.registeredTools}.`)
   }
   console.log(
     'Registration verified in a real browser. Use its connected agent surface to call lorestra_get_agent_guide, then lorestra_search.',

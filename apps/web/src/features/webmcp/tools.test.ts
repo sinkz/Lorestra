@@ -16,6 +16,37 @@ function clients(): AppClients {
   }
 }
 
+function createInput(documentId: string | null = null) {
+  return {
+    title: 'Cache incident handoff',
+    summary: 'Preserve the diagnosis',
+    reason: 'Evidence',
+    changes: [
+      {
+        id: 'change-webmcp',
+        target: {
+          documentId,
+          slug: 'cache-incident-handoff',
+          title: 'Cache incident handoff',
+        },
+        changeType: documentId ? ('modified' as const) : ('added' as const),
+        baseVersion: documentId ? 3 : null,
+        after: '# Intent\nPreserve the diagnosis and recovery evidence.',
+        metadata: {
+          locale: 'en' as const,
+          type: 'note' as const,
+          folderId: 'folder.docs.en',
+          tags: [],
+          relations: [],
+          status: 'published' as const,
+          visibility: 'public' as const,
+        },
+      },
+    ],
+    idempotencyKey: 'create-memory',
+  }
+}
+
 function structured(result: Awaited<ReturnType<WebMcpToolDefinition['execute']>>) {
   return result.structuredContent as Record<string, unknown>
 }
@@ -51,6 +82,8 @@ function proposal(overrides: Partial<Proposal> = {}): Proposal {
     summary: 'A test proposal.',
     body: 'A test proposal body.',
     status: 'open',
+    proposalVersion: 1,
+    contentHash: 'a'.repeat(64),
     author: 'test-author',
     createdAt: '2026-08-28T12:00:00.000Z',
     updatedAt: '2026-08-28T12:00:00.000Z',
@@ -77,7 +110,9 @@ describe('Lorestra WebMCP tools', () => {
 
   beforeEach(() => {
     appClients = clients()
-    tools = createLorestraWebMcpTools(appClients, () => 'en')
+    tools = createLorestraWebMcpTools(appClients, () => 'en', {
+      confirmMerge: () => true,
+    })
   })
 
   it('registers a unique, governed tool surface and unregisters it with one signal', async () => {
@@ -105,8 +140,8 @@ describe('Lorestra WebMCP tools', () => {
     )
 
     expect(registration.status).toBe('registered')
-    expect(registration.registeredToolCount).toBe(10)
-    expect(new Set(registrations.map(({ tool }) => tool.name)).size).toBe(10)
+    expect(registration.registeredToolCount).toBe(11)
+    expect(new Set(registrations.map(({ tool }) => tool.name)).size).toBe(11)
     expect(
       registrations.filter(({ tool }) => tool.annotations?.readOnlyHint).length,
     ).toBe(8)
@@ -161,11 +196,15 @@ describe('Lorestra WebMCP tools', () => {
         [graph, { scope: 'surprise' }, '"scope" must be one of'],
         [proposals, { status: 'pending' }, '"status" must be one of'],
         [history, { limit: 51 }, '"limit" must be between'],
-        [transition, { proposalId: 'proposal-test' }, '"status" is required'],
+        [transition, { proposalId: 'proposal-test' }, 'expectedProposalVersion'],
         [
           transition,
-          { proposalId: 'proposal-test', status: 'changes-requested' },
-          '"reason" must be a non-empty string',
+          {
+            proposalId: 'proposal-test',
+            status: 'changes_requested',
+            expectedProposalVersion: 1,
+          },
+          'reason',
         ],
       ]
 
@@ -289,9 +328,11 @@ describe('Lorestra WebMCP tools', () => {
     ).execute({
       proposalId: 'proposal-test',
       status: 'merged',
+      expectedProposalVersion: 1,
+      idempotencyKey: 'merge-failed-check',
     })
     expect(result.isError).toBe(true)
-    expect(errorMessage(result)).toContain('all checks must pass')
+    expect(errorMessage(result)).toContain('All checks must pass')
     expect(transition).not.toHaveBeenCalled()
   })
 
@@ -303,13 +344,21 @@ describe('Lorestra WebMCP tools', () => {
     )
 
     await toolNamed(updateTools, 'lorestra_create_proposal').execute({
-      title: 'Improve the existing guide',
-      body: 'Keep the existing document identity stable.',
-      documentId: 'lorestra.docs.existing.en',
+      ...createInput('lorestra.docs.existing.en'),
     })
 
     expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({ documentId: 'lorestra.docs.existing.en' }),
+      expect.objectContaining({
+        changes: expect.arrayContaining([
+          expect.objectContaining({
+            target: expect.objectContaining({
+              documentId: 'lorestra.docs.existing.en',
+            }),
+            baseVersion: 3,
+          }),
+        ]),
+      }),
+      expect.objectContaining({ idempotencyKey: 'create-memory' }),
     )
   })
 
@@ -319,9 +368,7 @@ describe('Lorestra WebMCP tools', () => {
 
     const created = structured(
       await create.execute({
-        title: 'Cache incident handoff',
-        body: '# Intent\nPreserve the diagnosis and the recovery evidence.',
-        locale: 'en',
+        ...createInput(),
       }),
     )
     const proposalId = created.proposalId as string
@@ -331,6 +378,8 @@ describe('Lorestra WebMCP tools', () => {
       proposalId,
       status: 'merged',
       reason: 'Attempted without review',
+      expectedProposalVersion: created.proposalVersion,
+      idempotencyKey: 'premature',
     })
     expect(prematureMerge.isError).toBe(true)
 
@@ -339,6 +388,8 @@ describe('Lorestra WebMCP tools', () => {
         proposalId,
         status: 'approved',
         reason: 'Evidence and scope reviewed',
+        expectedProposalVersion: created.proposalVersion,
+        idempotencyKey: 'approve',
       }),
     )
     expect(approved.status).toBe('approved')
@@ -348,8 +399,132 @@ describe('Lorestra WebMCP tools', () => {
         proposalId,
         status: 'merged',
         reason: 'Publishing the accepted memory',
+        expectedProposalVersion: approved.proposalVersion,
+        idempotencyKey: 'merge',
       }),
     )
     expect(merged.publishedKnowledgeChanged).toBe(true)
+  })
+  it('requires human confirmation and rejects a stale reviewed version', async () => {
+    const transition = vi.fn(async () => proposal({ status: 'merged' }))
+    const confirmMerge = vi.fn(() => false)
+    const tools = createLorestraWebMcpTools(
+      withClients({
+        proposals: {
+          get: vi.fn(async () => proposal({ status: 'approved', proposalVersion: 2 })),
+          transition,
+        },
+      }),
+      () => 'en',
+      { confirmMerge },
+    )
+    const merge = toolNamed(tools, 'lorestra_transition_proposal')
+    const stale = await merge.execute({
+      proposalId: 'proposal-test',
+      status: 'merged',
+      expectedProposalVersion: 1,
+      idempotencyKey: 'stale',
+    })
+    expect(stale.isError).toBe(true)
+    expect(confirmMerge).not.toHaveBeenCalled()
+    const denied = await merge.execute({
+      proposalId: 'proposal-test',
+      status: 'merged',
+      expectedProposalVersion: 2,
+      idempotencyKey: 'declined',
+    })
+    expect(denied.isError).toBe(true)
+    expect(confirmMerge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proposalId: 'proposal-test',
+        proposalVersion: 2,
+        contentHash: 'a'.repeat(64),
+      }),
+    )
+    expect(transition).not.toHaveBeenCalled()
+  })
+
+  it('resubmits the same proposal with its explicit version and unchanged Markdown', async () => {
+    const update = vi.fn(async () => proposal({ proposalVersion: 3 }))
+    const tools = createLorestraWebMcpTools(
+      withClients({ proposals: { update } }),
+      () => 'en',
+    )
+    await toolNamed(tools, 'lorestra_update_proposal').execute({
+      ...createInput(),
+      proposalId: 'proposal-test',
+      expectedProposalVersion: 2,
+    })
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proposalId: 'proposal-test',
+        expectedProposalVersion: 2,
+        reason: 'Evidence',
+        changes: expect.arrayContaining([
+          expect.objectContaining({ after: createInput().changes[0].after }),
+        ]),
+      }),
+      expect.objectContaining({ idempotencyKey: 'create-memory' }),
+    )
+  })
+
+  it('recovers an uncertain completed merge with the original version and idempotency key', async () => {
+    const transition = vi.fn(async () =>
+      proposal({ status: 'merged', proposalVersion: 3 }),
+    )
+    const confirmMerge = vi.fn(() => false)
+    const retryTools = createLorestraWebMcpTools(
+      withClients({
+        proposals: {
+          get: vi.fn(async () => proposal({ status: 'merged', proposalVersion: 3 })),
+          transition,
+        },
+      }),
+      () => 'en',
+      { confirmMerge },
+    )
+    const result = await toolNamed(retryTools, 'lorestra_transition_proposal').execute({
+      proposalId: 'proposal-test',
+      status: 'merged',
+      expectedProposalVersion: 2,
+      idempotencyKey: 'original-merge-key',
+    })
+    expect(result.isError).not.toBe(true)
+    expect(confirmMerge).not.toHaveBeenCalled()
+    expect(transition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedProposalVersion: 2,
+        confirmation: {
+          proposalId: 'proposal-test',
+          proposalVersion: 2,
+          contentHash: 'a'.repeat(64),
+        },
+      }),
+      expect.objectContaining({ idempotencyKey: 'original-merge-key' }),
+    )
+  })
+  it('returns editorial status and locale with search discoveries, including archived knowledge', async () => {
+    const result = structured(
+      await toolNamed(tools, 'lorestra_search').execute({
+        query: 'Lyra',
+        locale: 'en',
+        limit: 20,
+      }),
+    )
+    const results = result.results as Array<{
+      status: string
+      locale: string
+      slug: string
+    }>
+    expect(results.length).toBeGreaterThan(0)
+    expect(
+      results.every(
+        (item) =>
+          item.locale === 'en' && ['published', 'archived'].includes(item.status),
+      ),
+    ).toBe(true)
+    expect(results.find((item) => item.slug === 'demo-lyra-legacy')?.status).toBe(
+      'archived',
+    )
   })
 })

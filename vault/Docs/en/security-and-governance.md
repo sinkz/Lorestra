@@ -22,7 +22,7 @@ nav:
 
 # Security and governance
 
-The first release is public and read-only. Read access, menu presence, proposal authority, review authority, and merge authority are separate decisions. A document can appear in an authorized team's menu while remaining absent from the public projection.
+Anonymous visitors can read public knowledge. The durable local backend also supports authenticated development sessions: readers inspect internal knowledge, contributors propose and edit their own work, and maintainers review and merge. Shared internet login and deployment are a separate milestone. Menu presence and authorization are different decisions.
 
 ## Protect the source
 
@@ -30,7 +30,9 @@ Treat Markdown as untrusted input. Render with raw HTML disabled, validate front
 
 ## Protect the workflow
 
-A future authenticated adapter will resolve a principal and an authorization policy. Client-side flags cannot grant write or merge authority. A proposal records its target and base version. Approval means that reviewers accept the content; merge is the operation that creates the next published revision. History should be append-only from the product point of view.
+The server resolves the session and enforces permissions independently of client buttons. Proposals record document bases and their own content version. Approval does not publish. Editing reopens the same proposal and invalidates approval; merge alone commits the next immutable revisions. Conflicts preserve the draft instead of overwriting newer knowledge. Repeating an uncertain request with the same idempotency key and payload returns its original result.
+
+Private current or historical context must not leak through lists, counts, links or diffs. If any proposal version contains private context, its complete public review projection stays hidden. Application history is append-only, but this is not a cryptographic guarantee against a privileged storage administrator. Backups include referenced Markdown and workflow state, exclude sessions, and restore into a separate empty target.
 
 ## Handle an exposure
 

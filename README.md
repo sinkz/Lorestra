@@ -36,7 +36,7 @@ The result feels familiar to anyone who trusts GitHub's review model, but it is 
 
 ## A native interface for agents
 
-Lorestra does not ask an AI agent to scrape buttons or reverse-engineer the current UI. On a compatible browser, it registers ten typed tools through the current WebMCP `document.modelContext` API:
+Lorestra does not ask an AI agent to scrape buttons or reverse-engineer the current UI. On a compatible browser, it registers eleven typed tools through the WebMCP `document.modelContext` API:
 
 | Tool                           | Purpose                                              | Boundary                     |
 | ------------------------------ | ---------------------------------------------------- | ---------------------------- |
@@ -48,6 +48,7 @@ Lorestra does not ask an AI agent to scrape buttons or reverse-engineer the curr
 | `lorestra_list_proposals`      | Find reviewable knowledge changes                    | Read-only                    |
 | `lorestra_read_proposal`       | Inspect checks and a bounded Markdown diff           | Read-only, untrusted content |
 | `lorestra_create_proposal`     | Prepare a new memory or document update              | Write; never publishes       |
+| `lorestra_update_proposal`     | Correct and resubmit the same version-bound proposal | Invalidates earlier approval |
 | `lorestra_transition_proposal` | Request changes, approve, or explicitly merge        | Governed write               |
 | `lorestra_read_history`        | Trace proposals, documents, and resulting revisions  | Read-only                    |
 
@@ -77,7 +78,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-The web application defaults to `http://localhost:5173`. The mock vault is selected by default, so no account, cloud resource, credential, or `.env` file is required.
+Development defaults to the disposable mock for quick visual exploration. Production builds default to HTTP and contain no mock fixture chunk. To run the durable product locally, follow the next section; no Cloudflare account or resource is needed.
 
 Useful focused commands:
 
@@ -90,15 +91,25 @@ pnpm test:mutation
 pnpm demo:webmcp
 ```
 
-The WebMCP demo opens a compatible local Chromium build and verifies all ten real tool registrations. See the [evidence guide](apps/e2e/WEBMCP-DEMO.md) for browser setup and the expected output.
+The WebMCP demo requires a compatible local browser. Native registration evidence and authenticated durable workflow evidence are separate gates; see the [evidence guide](apps/e2e/WEBMCP-DEMO.md).
 
-### Switch from mocks to the final HTTP contract
+### Run the durable local backend
+
+```sh
+pnpm backend:init
+pnpm backend:dev
+```
+
+Initialization imports the actual bilingual Markdown vault into local D1/R2 and creates a private development session file under ignored `.lorestra/state/`. The CLI prints its location, never its token. Start the frontend in a second terminal after configuring the HTTP adapter below, then open `http://127.0.0.1:5173`. Choose **Sign in** and use the locally generated token. It is a development credential, not shared production authentication.
+
+For seed ownership, session expiry, maintenance, export, backup and recovery, read [Local backend operations](docs/operations/local-backend.md). Stop the backend before operator commands; initialization is explicit, never a hidden startup seed.
 
 Copy [`apps/web/.env.example`](apps/web/.env.example) to an ignored local `.env` file and select the HTTP adapter:
 
 ```dotenv
 VITE_DATA_ADAPTER=http
-VITE_LORESTRA_API_URL=http://localhost:8787
+VITE_LORESTRA_API_URL=/api
+LORESTRA_API_ORIGIN=http://127.0.0.1:8787
 ```
 
 That switch happens only in the composition root. Pages, query hooks, widgets, and WebMCP tools do not import fixtures and do not change when the mock package is removed.
@@ -113,8 +124,8 @@ flowchart LR
     A --> X[HTTP adapter]
     X --> C[Hono Worker vertical slices]
     C --> P[Knowledge and proposal ports]
-    P -. next adapter .-> R[(R2 Markdown + revisions)]
-    P -. next adapter .-> D[(D1 metadata + graph)]
+    P --> R[(R2 Markdown + revisions)]
+    P --> D[(D1 metadata + graph)]
     K[@lorestra/contracts] --> A
     K --> M
     K --> X
@@ -133,7 +144,7 @@ vault              Portable bilingual Markdown knowledge
 docs               Plan, architecture decisions, and repository assets
 ```
 
-The Worker currently exposes safe public read slices. Hosted multi-user writes remain intentionally disabled until server-side identity, authorization, durable audit storage, abuse controls, and backup are present. See the [architecture guide](docs/architecture.md) and [ADRs](docs/decisions).
+The local Worker persists knowledge and review workflows in actual D1/R2 bindings. It enforces roles, origins, CSRF, version guards and quotas. Publication is all-or-nothing across all changed files, and retrying the same operation does not duplicate revisions. Shared login, real provider configuration and deployment remain a separate, explicitly authorized milestone. See the [architecture guide](docs/architecture.md) and [ADRs](docs/decisions).
 
 ## Quality without test theater
 
@@ -146,9 +157,12 @@ The test suite concentrates on boundaries that can lose knowledge or violate gov
 - WebMCP registration, bounded search, and proposal safety;
 - deterministic galaxy grouping, bridge provenance, and non-overlapping layouts;
 - focused Playwright/Gherkin smoke journeys across desktop and mobile;
+- actual Workers/D1/R2 transaction, privacy and 1,000-document query-budget regressions;
 - targeted Stryker mutation testing for critical backend search and workflow rules.
 
 `pnpm check` runs formatting, lint, dependency boundaries, unused-code analysis, type checking, unit/integration tests, and production builds. E2E and mutation tests are explicit gates so the normal feedback loop stays fast.
+
+Run `pnpm test:e2e:http` for the isolated persistent-backend browser suite, `pnpm test:e2e:http:smoke` for its smoke subset, and `pnpm test:tooling` for import/storage/backup tooling. Tests use fictional data and exclude credential-bearing traces from artifacts. See the [scale report](docs/reports/backend-scale.md) for measured limits, not a hosting SLA.
 
 `pnpm knip` runs the installed Knip CLI through a small cross-platform wrapper. On Windows it defaults `KNIP_DISABLE_RAW_TRANSFER=1` to avoid oxc's experimental multi-gigabyte memory reservation; all unused-code checks remain enabled. An explicit environment value is preserved, and CLI arguments and exit codes pass through unchanged.
 
@@ -161,19 +175,19 @@ The API already targets Cloudflare Workers and builds with Wrangler. The product
 - Cloudflare Access or OIDC for principal resolution;
 - rate limiting and queues only after measured demand justifies them.
 
-No live resource IDs or credentials are committed. For the hackathon, the browser mock proves the final product and contract while keeping setup free and immediate.
+No live resource IDs or credentials are committed. The local backend exercises the Workers runtime without cloud provisioning. Free hosting has finite quotas and may have activation requirements: verify current Workers/D1/R2/identity pricing before an authorized deployment. On overload, fail clearly and preserve the draft; do not silently enable billing or build an unbounded queue.
 
 ## Security model
 
-The public hackathon projection is not a production collaborative backend. Do not expose development write adapters to the internet. A real deployment must enforce authorization in the Worker; a client-side flag can never grant merge authority.
+Do not expose the local development entry point or its credentials to the internet. Shared composition excludes local sign-in; configuring and validating a real identity provider is still required before shared collaboration. Server policy—not client buttons or agent instructions—controls every mutation.
 
-Raw HTML in Markdown is disabled, WebMCP content is annotated as untrusted, tool results are bounded, and secrets belong only in the deployment platform's encrypted store. Read [`SECURITY.md`](SECURITY.md) before connecting persistence or authentication.
+Raw HTML in Markdown is disabled, WebMCP content is annotated as untrusted, tool results are bounded, and secrets belong only in ignored local configuration or the deployment platform's encrypted store. Read [`SECURITY.md`](SECURITY.md) before exposing an installation.
 
 ## Contributing
 
 Lorestra is MIT licensed and designed to be cloned, extended, and connected to other agents. Use Conventional Commits, keep the contract boundary intact, and run `pnpm check` before opening a pull request. The full workflow is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-Good first contributions include a new storage adapter, a parser that imports an existing Markdown vault, graph clustering for very large workspaces, and authenticated proposal review.
+Good next contributions include import adapters for other vault formats, richer retrieval, graph sampling for very large workspaces, and the separately scoped shared identity integration.
 
 ---
 

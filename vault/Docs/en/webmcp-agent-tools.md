@@ -30,7 +30,9 @@ Call `lorestra_get_agent_guide`, then search before creating anything. The read 
 
 ## Write through review
 
-`lorestra_create_proposal` creates a reviewable draft and never changes published knowledge. `lorestra_transition_proposal` makes each local, simulated workflow action explicit. A merge is accepted only after approval and passing checks, and is the sole tool action that changes the published projection in the mock. The hackathon mock has no authenticated reviewer or merge authority; production must enforce those decisions on the server.
+`lorestra_create_proposal` creates a reviewable draft and never changes published knowledge. Send explicit metadata, the original `baseVersion` for each existing document, and a stable `idempotencyKey`. Keep the reason separate from Markdown. `lorestra_update_proposal` corrects and reopens the same proposal using `expectedProposalVersion`, invalidating earlier approval. `lorestra_transition_proposal` makes review and merge separate operations.
+
+In HTTP mode these tools use persistent D1/R2 storage and the authenticated browser session. Merge requires matching versions, valid approval and passing server checks; the browser-agent flow additionally asks for human confirmation of the exact approved proposal and content hash. An interrupted response is not permission to create a different operation: retry the same payload with its original key.
 
 Tool callbacks reuse Lorestra's typed application clients. Switching from the disposable mock adapter to the HTTP/Cloudflare adapter does not change the tool definitions or their behavior contract.
 
@@ -38,7 +40,9 @@ Tool callbacks reuse Lorestra's typed application clients. Switching from the di
 
 - results and graph neighborhoods are bounded;
 - schemas reject unknown fields, invalid values, and ambiguous actions;
-- the local mock blocks merge until the proposal is approved and every returned check passes;
+- read cursors and body/diff offsets tell the agent how to retrieve the next bounded part;
+- the backend rechecks role, session, maintenance and all document bases inside the publication transaction;
 - registration is scoped to the page lifecycle with an `AbortSignal`;
 - no credentials or merge authority are stored in browser code;
-- a future hosted write path must enforce identity and authorization on the server; the browser mock is not that boundary.
+- local development identities are not production login; a real identity provider and deployment still require separate configuration;
+- third-party agent tokens and automatic offline synchronization are not part of this PoC.

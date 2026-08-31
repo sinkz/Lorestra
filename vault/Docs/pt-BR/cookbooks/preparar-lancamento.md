@@ -2,7 +2,7 @@
 id: lorestra.docs.cookbook-launch.pt-br
 slug: cookbook-preparar-lancamento
 locale: pt-BR
-title: Cookbook: preparar um lançamento
+title: 'Cookbook: preparar um lançamento'
 description: Torne uma superfície de conhecimento pronta para publicar sem esconder riscos.
 folderId: folder.docs.pt-br
 visibility: public
@@ -12,7 +12,8 @@ createdAt: 2026-08-03T09:00:00.000Z
 updatedAt: 2026-08-22T09:00:00.000Z
 author: Produto e entrega
 tags: [cookbook, lançamento, qualidade]
-relatedDocumentIds: [lorestra.product.launch-readiness, lorestra.engineering.mock-removal]
+relatedDocumentIds:
+  [lorestra.product.launch-readiness, lorestra.engineering.mock-removal]
 nav:
   visible: true
   parentId: folder.docs.pt-br

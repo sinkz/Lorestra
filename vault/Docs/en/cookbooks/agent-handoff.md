@@ -2,7 +2,7 @@
 id: lorestra.docs.cookbook-agent-handoff.en
 slug: cookbook-agent-handoff
 locale: en
-title: Cookbook: handoff between agents
+title: 'Cookbook: handoff between agents'
 description: A bounded handoff that lets a second agent continue without guessing.
 folderId: folder.docs.en
 visibility: public
@@ -12,7 +12,8 @@ createdAt: 2026-08-02T09:00:00.000Z
 updatedAt: 2026-08-21T09:00:00.000Z
 author: Agent council
 tags: [cookbook, agents, handoff]
-relatedDocumentIds: [lorestra.team.agent-operating-manual, lorestra.docs.humans-and-agents.en]
+relatedDocumentIds:
+  [lorestra.team.agent-operating-manual, lorestra.docs.humans-and-agents.en]
 nav:
   visible: true
   parentId: folder.docs.en

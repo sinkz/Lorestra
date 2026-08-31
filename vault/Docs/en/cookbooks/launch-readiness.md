@@ -2,7 +2,7 @@
 id: lorestra.docs.cookbook-launch.en
 slug: cookbook-launch-readiness
 locale: en
-title: Cookbook: launch readiness
+title: 'Cookbook: launch readiness'
 description: Make a knowledge surface ready to ship without hiding risk.
 folderId: folder.docs.en
 visibility: public
@@ -12,7 +12,8 @@ createdAt: 2026-08-03T09:00:00.000Z
 updatedAt: 2026-08-22T09:00:00.000Z
 author: Product and delivery
 tags: [cookbook, launch, quality]
-relatedDocumentIds: [lorestra.product.launch-readiness, lorestra.engineering.mock-removal]
+relatedDocumentIds:
+  [lorestra.product.launch-readiness, lorestra.engineering.mock-removal]
 nav:
   visible: true
   parentId: folder.docs.en

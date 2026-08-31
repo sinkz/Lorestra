@@ -48,3 +48,49 @@ export const AuthorSchema = z.object({
   name: z.string().trim().min(1).max(120),
 })
 export type Author = z.infer<typeof AuthorSchema>
+
+export const ContentHashSchema = z
+  .string()
+  .regex(/^[a-f0-9]{64}$/, 'Expected a SHA-256 hash')
+export type ContentHash = z.infer<typeof ContentHashSchema>
+
+export const IdempotencyKeySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9._:-]+$/)
+export type IdempotencyKey = z.infer<typeof IdempotencyKeySchema>
+
+/** Transport options are not part of the serialized business payload. */
+export interface RequestOptions {
+  signal?: AbortSignal
+}
+
+export interface MutationRequestOptions extends RequestOptions {
+  idempotencyKey: string
+  csrfToken?: string
+}
+
+export const VaultPathSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(1000)
+  .refine((path) => {
+    if (/^[\\/]|^[a-z][a-z\d+.-]*:/i.test(path) || path.includes('\\')) return false
+    try {
+      return path.split('/').every((part) => {
+        const decoded = decodeURIComponent(part)
+        return (
+          decoded.length > 0 &&
+          decoded !== '.' &&
+          decoded !== '..' &&
+          !/[\\/]/.test(decoded) &&
+          !decoded.includes('\0')
+        )
+      })
+    } catch {
+      return false
+    }
+  }, 'Expected a normalized relative vault path')

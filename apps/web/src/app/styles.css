@@ -2842,3 +2842,109 @@ a {
     color: var(--forest-950);
   }
 }
+.editor-metadata {
+  margin-block: 16px;
+  padding: 14px;
+  border: 1px solid var(--line-paper);
+  border-radius: 12px;
+}
+.editor-metadata summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.editor-metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  padding-top: 16px;
+}
+.editor-metadata-grid .form-field {
+  min-width: 0;
+}
+.editor-draft-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.session-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  min-width: 0;
+}
+.session-toolbar small {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-readonly {
+  padding: 8px 20px;
+  background: #f7e9c9;
+  color: #503912;
+  border-bottom: 1px solid #d6bb76;
+}
+.remote-tree {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.remote-tree-pages {
+  flex: 0 0 auto;
+  max-height: 96px;
+  overflow: auto;
+}
+@media (max-width: 760px) {
+  .editor-metadata-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .session-toolbar small {
+    display: none;
+  }
+  .session-toolbar .button {
+    padding: 8px;
+  }
+}
+.proposal-metadata-diff {
+  padding: 12px 16px;
+  border-bottom: 1px solid #d4d6cc;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.proposal-metadata-diff summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.proposal-metadata-diff dl {
+  margin: 12px 0 0;
+}
+.proposal-metadata-diff dl > div {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) minmax(0, 3fr);
+  gap: 12px;
+  padding-block: 4px;
+}
+.proposal-metadata-diff dd {
+  margin: 0;
+}
+.proposal-metadata-diff del {
+  color: #ffd1c6;
+}
+.merge-confirmation-target {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line-paper);
+  border-radius: 12px;
+}
+.merge-confirmation-target dt {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.merge-confirmation-target dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}

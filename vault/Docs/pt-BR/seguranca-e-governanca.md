@@ -22,7 +22,7 @@ nav:
 
 # Segurança e governança
 
-A primeira versão é pública e somente leitura. Acesso de leitura, presença no menu, autoridade para propor, autoridade para revisar e autoridade para fazer merge são decisões separadas. Um documento pode aparecer no menu de uma equipe autorizada e continuar fora da projeção pública.
+Visitantes anônimos podem ler conhecimento público. O backend local persistente também oferece sessões autenticadas de desenvolvimento: leitores consultam conhecimento interno, colaboradores propõem e editam o próprio trabalho, e mantenedores revisam e fazem merge. Login compartilhado na internet e deploy são um marco separado. Presença no menu e autorização são decisões diferentes.
 
 ## Proteja a fonte
 
@@ -30,7 +30,9 @@ Trate Markdown como entrada não confiável. Renderize com HTML bruto desabilita
 
 ## Proteja o fluxo
 
-Um adapter autenticado futuro resolverá um principal e uma policy de autorização. Flags no cliente não concedem autoridade de escrita ou merge. A proposta registra alvo e versão-base. Aprovação significa que revisores aceitaram o conteúdo; merge é a operação que cria a próxima revisão publicada. O histórico deve ser append-only do ponto de vista do produto.
+O servidor resolve a sessão e aplica permissões independentemente dos botões da interface. Propostas registram a base dos documentos e sua própria versão de conteúdo. Aprovar não publica. Editar reabre a mesma proposta e invalida a aprovação; somente merge publica as próximas revisões imutáveis. Conflitos preservam o rascunho em vez de sobrescrever conhecimento mais novo. Repetir uma requisição incerta com a mesma chave de idempotência e conteúdo recupera seu resultado original.
+
+Contexto privado atual ou histórico não pode vazar em listas, contagens, relações ou diffs. Se alguma versão da proposta contém contexto privado, sua projeção pública de revisão fica inteiramente oculta. O histórico é append-only pela aplicação, mas isso não é uma garantia criptográfica contra um administrador do storage. Backups incluem o Markdown referenciado e o fluxo de revisão, excluem sessões e são restaurados em um destino separado e vazio.
 
 ## Em caso de exposição
 

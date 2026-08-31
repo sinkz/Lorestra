@@ -8,9 +8,13 @@ Include the affected version, reproduction steps, expected impact, and any sugge
 
 ## Current security boundary
 
-The hackathon build uses removable local mock adapters. It does not provide production authentication, durable multi-user writes, rate limiting, or Cloudflare storage. Do not expose development write adapters to the public internet.
+The durable local build uses real Workers/D1/R2 bindings with session hashes, server-side roles, origin/CSRF checks, byte limits, quotas, optimistic versions and atomic publication. Development sessions are synthetic credentials issued by an operator CLI. The local session exchange cannot create an actor or accept a client-selected role.
 
-Public deployments should remain read-only until authentication, authorization, audit storage, abuse controls, and backup procedures are configured.
+Do not expose the local entry point or development credentials to the public internet. The shared entry point excludes local sign-in; Access/OIDC login, deployment configuration and staging validation remain outstanding. Public read access is not permission to write. Browser mocks remain a visual-test adapter, never a security boundary.
+
+R2 is private. Current and historical document, folder and relation visibility constrain public projections; a proposal involving private historical context is hidden as a whole. Append-only application triggers and checksums are not proof against a privileged operator controlling both stores. Treat portable exports and backups as potentially private; local tooling does not encrypt or upload them.
+
+Sessions and tokens are excluded from backups and automatic HTTP test screenshots/traces/videos. Restoring requires a separate empty target and leaves writes disabled. See [local operations](docs/operations/local-backend.md).
 
 ## Secrets
 

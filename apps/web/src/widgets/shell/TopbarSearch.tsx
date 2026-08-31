@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { useSearchQuery } from '../../shared/api/hooks'
+import { errorMessageKey } from '../../shared/api/errors'
 import { Icon } from '../../shared/ui'
 
 export function TopbarSearch() {
@@ -44,7 +45,11 @@ export function TopbarSearch() {
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Escape') setQuery('')
-          if (event.key === 'Enter' && search.data?.results[0])
+          if (
+            event.key === 'Enter' &&
+            query === debouncedQuery &&
+            search.data?.results[0]
+          )
             openResult(search.data.results[0].slug)
         }}
         placeholder={t('shell.searchPlaceholder')}
@@ -62,8 +67,15 @@ export function TopbarSearch() {
           role="listbox"
           aria-label={t('shell.search')}
         >
-          {search.isLoading ? (
+          {search.isLoading || query !== debouncedQuery ? (
             <div className="search-state">{t('common.loading')}</div>
+          ) : search.isError ? (
+            <div className="search-state" role="alert">
+              <p>{t(errorMessageKey(search.error))}</p>
+              <button type="button" onClick={() => void search.refetch()}>
+                {t('common.retry')}
+              </button>
+            </div>
           ) : search.data?.results.length ? (
             search.data.results.map((result) => (
               <button
@@ -75,6 +87,7 @@ export function TopbarSearch() {
               >
                 <span className="result-kind">
                   {t(`common.kind.${result.kind}`, { defaultValue: result.kind })}
+                  {result.status === 'archived' ? ` · ${t('common.archived')}` : ''}
                 </span>
                 <span>
                   <strong>{result.title}</strong>

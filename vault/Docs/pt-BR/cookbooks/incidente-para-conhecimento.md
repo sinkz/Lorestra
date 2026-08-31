@@ -2,7 +2,7 @@
 id: lorestra.docs.cookbook-incident.pt-br
 slug: cookbook-incidente-para-conhecimento
 locale: pt-BR
-title: Cookbook: do incidente ao conhecimento reutilizável
+title: 'Cookbook: do incidente ao conhecimento reutilizável'
 description: Transforme uma linha do tempo de incidente em um runbook pequeno e verificável.
 folderId: folder.docs.pt-br
 visibility: public
@@ -12,7 +12,8 @@ createdAt: 2026-08-02T09:00:00.000Z
 updatedAt: 2026-08-21T09:00:00.000Z
 author: Guilda de confiabilidade
 tags: [cookbook, incidente, operações]
-relatedDocumentIds: [lorestra.engineering.incident-response, lorestra.docs.seguranca-governanca.pt-br]
+relatedDocumentIds:
+  [lorestra.engineering.incident-response, lorestra.docs.seguranca-governanca.pt-br]
 nav:
   visible: true
   parentId: folder.docs.pt-br

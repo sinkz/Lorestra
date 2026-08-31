@@ -16,7 +16,9 @@
 
 </div>
 
-![Lorestra Atlas showing a connected, bilingual knowledge vault](docs/media/lorestra-atlas.png)
+![Lorestra's celestial Atlas with connected galaxies, planets, and knowledge hubs](docs/media/lorestra-atlas.png)
+
+_The current local app, captured with the English interface and a fictional knowledge vault._
 
 ## Why Lorestra
 
@@ -64,6 +66,27 @@ Tool schemas and callbacks reuse the exact same typed application clients as the
 - **Vault Docs** — learn the product from bilingual documentation stored and reviewed like every other memory.
 
 The mock also includes **Orion (engineering), Lyra (learning), and Cygnus (research)**: three fictional example communities with guides, notes, decisions, incidents, runbooks, and archived predecessors in both languages. Read [the celestial content model](docs/atlas-content-model.md) to see how metadata chooses planets, stars, satellites, and black holes.
+
+### See the workspace
+
+These screenshots come from the running local HTTP application, not the early HTML prototype. The interface is English; proposal titles and content retain their authors' original language. The read-only visitor view shows public knowledge and merged proposals; authenticated review actions depend on the session's role.
+
+**A review queue with traceable changes.** Open a proposal to inspect its affected files, diff, and resulting history.
+
+![Lorestra proposal list with merged bilingual examples from local agent exercises](docs/media/lorestra-proposals.png)
+
+**Readable knowledge with version context.** The document workspace keeps its status, author, links, and revision alongside the Markdown preview.
+
+![Using Lorestra document with rendered Markdown, version metadata, and navigation tabs](docs/media/lorestra-document.png)
+
+<details>
+<summary>View the same document as Markdown</summary>
+
+Switch to the Markdown tab to inspect the source. Proposed edits follow review and merge; they do not silently replace published knowledge.
+
+![The same Using Lorestra document in the Markdown source tab](docs/media/lorestra-markdown.png)
+
+</details>
 
 ## Run locally
 

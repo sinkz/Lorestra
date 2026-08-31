@@ -80,6 +80,7 @@ interface StoredRevision {
   readonly locale: FixtureDocument['locale']
   readonly folderId: string
   readonly kind: FixtureDocument['kind']
+  readonly type: DocumentType
   readonly visibility: FixtureDocument['visibility']
   readonly status: FixtureDocument['status']
   readonly author: string
@@ -124,6 +125,7 @@ const author = (value: string): Author => ({
 })
 
 const documentType = (document: FixtureDocument): DocumentType => {
+  if (document.type) return document.type
   const values =
     `${document.id} ${document.title} ${document.tags.join(' ')}`.toLowerCase()
   if (values.includes('incident')) return 'incident'
@@ -135,7 +137,8 @@ const documentType = (document: FixtureDocument): DocumentType => {
 }
 
 const visible = (document: FixtureDocument): boolean =>
-  document.visibility === 'public' && document.status === 'published'
+  document.visibility === 'public' &&
+  (document.status === 'published' || document.status === 'archived')
 
 const documentOrder = (
   document: FixtureDocument,
@@ -193,6 +196,7 @@ const revisionFromDocument = (
   locale: document.locale,
   folderId: document.folderId,
   kind: document.kind,
+  type: documentType(document),
   visibility: document.visibility,
   status: document.status,
   author: document.author,
@@ -593,6 +597,7 @@ const toDocument = (
       folderId: revision.folderId,
       folderPath: [],
       kind: revision.kind,
+      type: revision.type,
       visibility: revision.visibility,
       status: revision.status,
       version: revision.version,
@@ -904,13 +909,15 @@ export class MockKnowledgeClient implements KnowledgeClient {
     )
     const filtered = this.store
       .listHistory()
-      .filter(
-        (event) =>
-          !event.documentId ||
-          (documentsById.get(event.documentId)?.visibility === 'public' &&
-            (!request.locale ||
-              documentsById.get(event.documentId)?.locale === request.locale)),
-      )
+      .filter((event) => {
+        if (!event.documentId) return true
+        const document = documentsById.get(event.documentId)
+        return (
+          document &&
+          visible(document) &&
+          (!request.locale || document.locale === request.locale)
+        )
+      })
       .filter((event) => !request.documentId || event.documentId === request.documentId)
       .filter((event) => !request.proposalId || event.proposalId === request.proposalId)
       .filter((event) => !request.type || toHistoryType(event.type) === request.type)

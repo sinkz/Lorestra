@@ -62,6 +62,8 @@ Tool schemas and callbacks reuse the exact same typed application clients as the
 - **History** — follow an immutable trail into the related proposal, document, and revision context.
 - **Vault Docs** — learn the product from bilingual documentation stored and reviewed like every other memory.
 
+The mock also includes **Orion (engineering), Lyra (learning), and Cygnus (research)**: three fictional example communities with guides, notes, decisions, incidents, runbooks, and archived predecessors in both languages. Read [the celestial content model](docs/atlas-content-model.md) to see how metadata chooses planets, stars, satellites, and black holes.
+
 ## Run locally
 
 ### Requirements
@@ -143,7 +145,7 @@ The test suite concentrates on boundaries that can lose knowledge or violate gov
 - mock/API adapter behavior;
 - WebMCP registration, bounded search, and proposal safety;
 - deterministic galaxy grouping, bridge provenance, and non-overlapping layouts;
-- eight Playwright/Gherkin smoke journeys across desktop and mobile;
+- focused Playwright/Gherkin smoke journeys across desktop and mobile;
 - targeted Stryker mutation testing for critical backend search and workflow rules.
 
 `pnpm check` runs formatting, lint, dependency boundaries, unused-code analysis, type checking, unit/integration tests, and production builds. E2E and mutation tests are explicit gates so the normal feedback loop stays fast.

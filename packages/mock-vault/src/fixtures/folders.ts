@@ -1,4 +1,5 @@
 import type { FixtureFolder } from './types'
+import { celestialDemoFolders } from './celestial-demo'
 
 export const folders: readonly FixtureFolder[] = [
   {
@@ -51,4 +52,5 @@ export const folders: readonly FixtureFolder[] = [
     visibility: 'public',
     locale: 'all',
   },
+  ...celestialDemoFolders,
 ]

@@ -43,6 +43,13 @@ export function DocumentPage() {
   const document = documentQuery.data
   const history = useHistoryQuery(document?.id)
   const tab = normalizeTab(params.get('tab'))
+  const documentSlugs = useMemo(
+    () =>
+      (navigation.data?.documents ?? [])
+        .filter((item) => item.locale === locale)
+        .map((item) => item.slug),
+    [locale, navigation.data?.documents],
+  )
 
   useEffect(() => {
     setSource(document?.body ?? '')
@@ -192,7 +199,7 @@ export function DocumentPage() {
           aria-labelledby={`document-tab-${tab}`}
         >
           {tab === 'preview' ? (
-            <MarkdownContent source={document.body} />
+            <MarkdownContent source={document.body} documentSlugs={documentSlugs} />
           ) : tab === 'markdown' ? (
             <MarkdownTab
               source={source}

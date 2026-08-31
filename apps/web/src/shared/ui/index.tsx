@@ -1,13 +1,16 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   type ButtonHTMLAttributes,
   type DialogHTMLAttributes,
   type ReactNode,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import ReactMarkdown from 'react-markdown'
+import { Link } from 'react-router'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { resolveMarkdownDocumentLink } from './markdownLinks'
 import type {
   DocumentStatus,
   DocumentKind,
@@ -311,10 +314,33 @@ export function Pagination({
   )
 }
 
-export function MarkdownContent({ source }: { source: string }) {
+export function MarkdownContent({
+  source,
+  documentSlugs,
+}: {
+  source: string
+  documentSlugs?: readonly string[]
+}) {
+  const components = useMemo<Components>(() => {
+    const slugs = new Set(documentSlugs)
+    return {
+      a: ({ href, ...props }) => {
+        delete props.node
+        const destination = resolveMarkdownDocumentLink(href, slugs)
+        return destination ? (
+          <Link {...props} to={destination} />
+        ) : (
+          <a {...props} href={href} />
+        )
+      },
+    }
+  }, [documentSlugs])
+
   return (
     <div className="markdown-content">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{source}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {source}
+      </ReactMarkdown>
     </div>
   )
 }

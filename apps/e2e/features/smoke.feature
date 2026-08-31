@@ -50,6 +50,30 @@ Feature: Lorestra knowledge workflow
     Then the camera tooltip is hidden
     And the camera control "Rotate right" keeps keyboard focus
 
+  Scenario: Read a demo satellite process and its archived predecessor
+    Given I open Lorestra at "/atlas?scope=folder&folder=folder.demo.orion.en"
+    Then the knowledge graph has visible nodes
+    When I select the graph node "Orion: recovery checklist"
+    Then the selected graph node offers to open "Orion: recovery checklist"
+    When I open the selected graph node "Orion: recovery checklist" with the keyboard
+    Then the heading "Orion: recovery checklist" is visible
+    And the URL contains "/documents/demo-orion-runbook"
+    And the document body contains "Use this example checklist when the returned revision disagrees with the requested revision."
+    And the document type is "Process"
+    When I return to the previous Atlas view
+    Then the URL contains "folder=folder.demo.orion.en"
+    And the knowledge graph has visible nodes
+    When I select the graph node "Orion: retired cache rule"
+    Then the selected graph node offers to open "Orion: retired cache rule"
+    When I open the selected graph node "Orion: retired cache rule" with the keyboard
+    Then the heading "Orion: retired cache rule" is visible
+    And the URL contains "/documents/demo-orion-legacy"
+    And the document body contains "Do not apply this rule."
+    And the document status "Archived" is readable
+    When I follow the document reference "Orion: reliable responses"
+    Then the heading "Orion: reliable responses" is visible
+    And the URL contains "/documents/demo-orion-overview"
+
   Scenario: Clear stale library state and create a proposal
     Given I open Lorestra at "/library?q=no-document-can-match"
     Then the heading "All knowledge" is visible

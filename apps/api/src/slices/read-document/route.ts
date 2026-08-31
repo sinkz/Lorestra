@@ -25,7 +25,8 @@ const documentRoute = createRoute({
   responses: {
     200: {
       content: { 'application/json': { schema: DocumentResponseSchema } },
-      description: 'A published public document and its current revision.',
+      description:
+        'A public published or archived document and its requested revision.',
     },
     404: {
       content: { 'application/json': { schema: ApiErrorResponseSchema } },

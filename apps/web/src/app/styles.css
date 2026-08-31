@@ -102,7 +102,8 @@ a {
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   background: var(--ink-950);
@@ -111,7 +112,9 @@ a {
   position: relative;
   z-index: 30;
   display: flex;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
   flex-direction: column;
   border-right: 1px solid var(--line-dark);
   background:
@@ -455,7 +458,8 @@ a {
 
 .app-main {
   min-width: 0;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
   display: grid;
   grid-template-rows: var(--topbar-height) minmax(0, 1fr);
 }
@@ -2500,7 +2504,8 @@ a {
     inset: 0 auto 0 0;
     z-index: 40;
     width: min(320px, 88vw);
-    min-height: 100vh;
+    height: 100dvh;
+    min-height: 0;
     transform: translateX(-105%);
     transition: transform 0.22s ease;
     box-shadow: var(--shadow-deep);
@@ -2528,7 +2533,7 @@ a {
     padding: 0;
   }
   .app-main {
-    min-height: 100vh;
+    min-height: 0;
   }
   .topbar {
     gap: 12px;

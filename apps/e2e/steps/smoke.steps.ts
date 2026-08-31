@@ -38,6 +38,15 @@ When('I open the graph node {string}', async ({ page }, title: string) => {
   await page.getByRole('button', { name: `Select ${title}`, exact: true }).dblclick()
 })
 
+When('I select the graph node {string}', async ({ page }, title: string) => {
+  await page.getByRole('button', { name: `Select ${title}`, exact: true }).click()
+})
+
+When('I return to the previous Atlas view', async ({ page }) => {
+  await page.goBack()
+  await expect(page.locator('.galaxy-canvas')).toBeVisible()
+})
+
 Then('the knowledge graph is spread across both axes', async ({ page }) => {
   await expect(async () => {
     const viewport = await page.locator('.galaxy-canvas').boundingBox()
@@ -48,6 +57,9 @@ Then('the knowledge graph is spread across both axes', async ({ page }) => {
       })),
     )
     expect(viewport).not.toBeNull()
+    expect(viewport?.height ?? Infinity).toBeLessThanOrEqual(
+      page.viewportSize()?.height ?? 0,
+    )
     expect(positions.length).toBeGreaterThan(5)
     expect(
       positions.every(({ x, y }) => Number.isFinite(x) && Number.isFinite(y)),
@@ -261,6 +273,45 @@ Then('the document body does not contain {string}', async ({ page }, text: strin
 
 Then('the document body contains {string}', async ({ page }, text: string) => {
   await expect(page.locator('.document-content')).toContainText(text)
+})
+
+Then('the document type is {string}', async ({ page }, kind: string) => {
+  await expect(page.locator('.document-status .document-kind').first()).toHaveText(kind)
+})
+
+When('I follow the document reference {string}', async ({ page }, title: string) => {
+  await page
+    .locator('.markdown-content')
+    .getByRole('link', { name: title, exact: true })
+    .first()
+    .click()
+})
+
+Then('the document status {string} is readable', async ({ page }, status: string) => {
+  const badge = page.locator('.document-status .status-badge')
+  await expect(badge).toHaveText(status)
+  await expect(badge).toBeVisible()
+  const contrast = await badge.evaluate((element) => {
+    const luminance = (color: string) => {
+      const rgb = (color.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number)
+      return rgb.reduce((sum, component, index) => {
+        const channel = component / 255
+        const linear =
+          channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+        return sum + linear * [0.2126, 0.7152, 0.0722][index]!
+      }, 0)
+    }
+    const foreground = luminance(getComputedStyle(element).color)
+    // The status badge is transparent on the document's opaque paper surface.
+    const paper = element.closest('.document')
+    if (!paper) return 0
+    const background = luminance(getComputedStyle(paper).backgroundColor)
+    return (
+      (Math.max(foreground, background) + 0.05) /
+      (Math.min(foreground, background) + 0.05)
+    )
+  })
+  expect(contrast).toBeGreaterThanOrEqual(4.5)
 })
 
 When('I return to the proposal', async ({ page }) => {

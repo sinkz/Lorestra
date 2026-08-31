@@ -1,10 +1,15 @@
 import {
   ApiErrorResponseSchema,
   DocumentListResponseSchema,
+  DocumentResponseSchema,
+  GraphResponseSchema,
   HealthResponseSchema,
   HistoryResponseSchema,
+  NavigationResponseSchema,
+  SearchResponseSchema,
 } from '@lorestra/contracts'
 
+import { createMemoryDependencies } from '../adapters/memory.js'
 import { createApp } from './create-app.js'
 
 describe('Lorestra API', () => {
@@ -57,6 +62,125 @@ describe('Lorestra API', () => {
     )
     expect(hidden.status).toBe(404)
     expect(ApiErrorResponseSchema.safeParse(await hidden.json()).success).toBe(true)
+  })
+
+  it('serves public archives across read slices without exposing drafts or internal records', async () => {
+    const baseline = await createMemoryDependencies().knowledge.getDocument({
+      slug: 'what-is-lorestra',
+      locale: 'en',
+    })
+    if (!baseline) throw new Error('Expected baseline public document')
+    const states = [
+      { slug: 'public-published', visibility: 'public', status: 'published' },
+      { slug: 'public-archived', visibility: 'public', status: 'archived' },
+      { slug: 'public-draft', visibility: 'public', status: 'draft' },
+      { slug: 'internal-published', visibility: 'internal', status: 'published' },
+      { slug: 'internal-archived', visibility: 'internal', status: 'archived' },
+      { slug: 'internal-draft', visibility: 'internal', status: 'draft' },
+    ] as const
+    const records = states.map((state) => ({
+      ...baseline.document,
+      ...state,
+      id: `visibility-${state.slug}`,
+      title: `Visibility ${state.slug}`,
+      body: `# Visibility ${state.slug}`,
+      folderId: 'visibility-folder',
+      nav: { visible: true, parentId: 'visibility-folder', order: 1 },
+      relations:
+        state.slug === 'public-published' ? ['visibility-public-archived'] : [],
+    }))
+    const projection = createApp(
+      createMemoryDependencies({
+        documents: records,
+        folders: [
+          {
+            id: 'visibility-folder',
+            slug: 'visibility-folder',
+            title: 'Visibility',
+            parentId: null,
+            order: 1,
+            visibility: 'public',
+            locale: 'en',
+          },
+        ],
+        history: records.map((record) => ({
+          id: `history-${record.id}`,
+          type: 'document_updated',
+          occurredAt: record.updatedAt,
+          actor: record.author,
+          proposalId: null,
+          documentId: record.id,
+          documentSlug: record.slug,
+          summary: `Updated ${record.title}`,
+          resultingVersion: record.version,
+        })),
+      }),
+    )
+    const expectedIds = ['visibility-public-archived', 'visibility-public-published']
+    const navigation = NavigationResponseSchema.parse(
+      await (await projection.request('http://localhost/navigation?locale=en')).json(),
+    )
+    const listing = DocumentListResponseSchema.parse(
+      await (
+        await projection.request('http://localhost/documents?locale=en&limit=20')
+      ).json(),
+    )
+    const graph = GraphResponseSchema.parse(
+      await (
+        await projection.request('http://localhost/graph?scope=entire&locale=en')
+      ).json(),
+    )
+    const search = SearchResponseSchema.parse(
+      await (
+        await projection.request('http://localhost/search?q=Visibility&locale=en')
+      ).json(),
+    )
+    const archives = DocumentListResponseSchema.parse(
+      await (
+        await projection.request('http://localhost/documents?locale=en&status=archived')
+      ).json(),
+    )
+    const history = HistoryResponseSchema.parse(
+      await (
+        await projection.request('http://localhost/history?locale=en&limit=20')
+      ).json(),
+    )
+    for (const items of [
+      navigation.documents,
+      listing.items,
+      search.items,
+      graph.nodes.filter((node) => node.kind === 'document'),
+    ]) {
+      expect(items.map((document) => document.id).sort()).toEqual(expectedIds)
+    }
+    expect(
+      navigation.items
+        .filter((item) => item.kind === 'document')
+        .map((item) => item.documentId)
+        .sort(),
+    ).toEqual(expectedIds)
+    expect(archives.items).toMatchObject([
+      { id: 'visibility-public-archived', status: 'archived' },
+    ])
+    expect(history.items.map((event) => event.documentId).sort()).toEqual(expectedIds)
+    expect(history.pageInfo.totalCount).toBe(2)
+    expect(graph.edges).toContainEqual(
+      expect.objectContaining({
+        source: 'visibility-public-published',
+        target: 'visibility-public-archived',
+      }),
+    )
+    for (const record of records) {
+      const response = await projection.request(
+        `http://localhost/documents/${record.slug}?locale=en`,
+      )
+      if (expectedIds.includes(record.id)) {
+        expect(response.status).toBe(200)
+        expect(
+          DocumentResponseSchema.parse(await response.json()).document,
+        ).toMatchObject({ id: record.id, status: record.status })
+      } else expect(response.status).toBe(404)
+    }
   })
 
   it('keeps search and navigation inside the public projection', async () => {

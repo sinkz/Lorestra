@@ -16,9 +16,9 @@ describe('navigation adapter', () => {
     expect(
       navigation.documents.every((document) => document.folderPath !== 'Unsorted'),
     ).toBe(true)
-    expect(
-      navigation.documents.every((document) => document.status === 'published'),
-    ).toBe(true)
+    expect(navigation.documents.every((document) => document.status !== 'draft')).toBe(
+      true,
+    )
   })
 })
 

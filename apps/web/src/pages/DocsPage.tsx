@@ -22,6 +22,13 @@ export function DocsPage() {
   const setLocale = useShellStore((state) => state.setLocale)
   const navigation = useNavigationQuery()
   const documentQuery = useDocumentQuery(slug)
+  const documentSlugs = useMemo(
+    () =>
+      (navigation.data?.documents ?? [])
+        .filter((document) => document.locale === locale)
+        .map((document) => document.slug),
+    [locale, navigation.data?.documents],
+  )
 
   useEffect(() => {
     setLocale(locale)
@@ -97,7 +104,7 @@ export function DocsPage() {
               {document.title}
             </h1>
             <p className="docs-reader-lead">{document.summary}</p>
-            <MarkdownContent source={document.body} />
+            <MarkdownContent source={document.body} documentSlugs={documentSlugs} />
           </article>
         </div>
       </section>

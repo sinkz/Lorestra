@@ -217,7 +217,10 @@ const memoryStore: KnowledgeStore = {
 }
 
 function isPublic(document: KnowledgeRecord): boolean {
-  return document.visibility === 'public' && document.status === 'published'
+  return (
+    document.visibility === 'public' &&
+    (document.status === 'published' || document.status === 'archived')
+  )
 }
 
 function folderVisible(
@@ -597,9 +600,11 @@ export interface ApiDependencies {
   version: string
 }
 
-export function createMemoryDependencies(): ApiDependencies {
+export function createMemoryDependencies(
+  store: KnowledgeStore = memoryStore,
+): ApiDependencies {
   return {
-    knowledge: new MemoryKnowledgeReader(),
+    knowledge: new MemoryKnowledgeReader(store),
     proposals: new MemoryProposalReader(),
     version: '0.1.0',
   }

@@ -1,3 +1,5 @@
+import type { DocumentType } from '@lorestra/contracts'
+
 /**
  * Data owned by the fixture adapter.  These records deliberately resemble
  * the transport records from @lorestra/contracts, but the mock keeps its
@@ -32,6 +34,8 @@ export interface FixtureDocument {
   readonly folderId: string
   readonly folderPath: readonly string[]
   readonly kind: FixtureDocumentKind
+  /** Semantic document type; older fixtures may rely on adapter inference. */
+  readonly type?: DocumentType
   readonly visibility: FixtureVisibility
   readonly status: FixtureStatus
   readonly version: number

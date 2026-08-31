@@ -61,6 +61,8 @@ draft proposal -> review -> approved proposal -> merge -> immutable revision
 
 Creating a proposal and approving it do not change the document returned by the read client. Merge is the only operation that creates a published revision. This invariant is tested at the state-machine, API, WebMCP, and browser-smoke seams.
 
+The public read projection includes published documents and public archives. An archive is retained historical knowledge (a black hole in the Atlas), not a privacy action. Drafts and internal documents remain excluded from navigation, reads, search, graphs, and history in both adapters. See the [celestial content model](atlas-content-model.md) for the metadata mapping and fictional bilingual examples.
+
 ## Replacing the mock
 
 1. Start the Worker and set `VITE_DATA_ADAPTER=http`.

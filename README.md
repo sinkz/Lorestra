@@ -182,15 +182,15 @@ For seed ownership, session expiry, maintenance, export, backup and recovery, re
 
 ```mermaid
 flowchart LR
-    H[Human interface] --> A[Typed application clients]
-    W[WebMCP tools] --> A
-    A --> M[Disposable mock adapter]
-    A --> X[HTTP adapter]
-    X --> C[Hono Worker vertical slices]
-    C --> P[Knowledge and proposal ports]
-    P --> R[(R2 Markdown + revisions)]
-    P --> D[(D1 metadata + graph)]
-    K[@lorestra/contracts] --> A
+    H["Human interface"] --> A["Typed application clients"]
+    W["WebMCP tools"] --> A
+    A --> M["Disposable mock adapter"]
+    A --> X["HTTP adapter"]
+    X --> C["Hono Worker vertical slices"]
+    C --> P["Knowledge and proposal ports"]
+    P --> R[("R2 Markdown + revisions")]
+    P --> D[("D1 metadata + graph")]
+    K["@lorestra/contracts"] --> A
     K --> M
     K --> X
     K --> C
@@ -209,6 +209,12 @@ docs               Plan, architecture decisions, and repository assets
 ```
 
 The local Worker persists knowledge and review workflows in actual D1/R2 bindings. It enforces roles, origins, CSRF, version guards and quotas. Publication is all-or-nothing across all changed files, and retrying the same operation does not duplicate revisions. Shared login, real provider configuration and deployment remain a separate, explicitly authorized milestone. See the [architecture guide](docs/architecture.md) and [ADRs](docs/decisions).
+
+### Knowledge format and OKF
+
+Lorestra takes inspiration from [Open Knowledge Format (OKF)](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md), published by Google Cloud: portable Markdown knowledge with YAML frontmatter and links. [ApolloKairn](https://github.com/sinkz/apollokairn) informed the shared-memory concept; it is not Lorestra's backend or a runtime dependency.
+
+**Current status: OKF-inspired, not an OKF-conformant producer or consumer.** Lorestra currently uses its own metadata contract, stable document IDs, folder indexes, and export manifest. Some seed documents infer their type instead of declaring OKF's required `type` field; Lorestra's index documents also differ from OKF's reserved `index.md` convention. Importing or exporting an interoperable OKF bundle requires an explicit mapping and conformance tests, which are not implemented yet. Markdown plus YAML alone does not establish compatibility.
 
 ## Quality without test theater
 

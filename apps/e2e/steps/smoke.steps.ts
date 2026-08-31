@@ -17,6 +17,16 @@ async function readCelestialFrame(page: Page) {
   })
 }
 
+async function readCameraState(page: Page) {
+  return page.locator('.galaxy-canvas').evaluate((graph) => ({
+    yaw: graph.getAttribute('data-yaw'),
+    pitch: graph.getAttribute('data-pitch'),
+    zoom: graph.getAttribute('data-zoom'),
+    panX: graph.getAttribute('data-pan-x'),
+    panY: graph.getAttribute('data-pan-y'),
+  }))
+}
+
 Given('I open Lorestra at {string}', async ({ page }, path: string) => {
   await page.goto(path)
 })
@@ -117,6 +127,192 @@ When(
     await expect(graph).toHaveAttribute('data-yaw', before.yaw ?? '')
     await expect(graph).toHaveAttribute('data-pitch', before.pitch ?? '')
     await expect(graph).toHaveAttribute('data-zoom', before.zoom ?? '')
+  },
+)
+
+When('I zoom the graph for panning', async ({ page }) => {
+  const graph = page.locator('.galaxy-canvas')
+  const before = Number(await graph.getAttribute('data-zoom'))
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
+  await expect
+    .poll(async () => Number(await graph.getAttribute('data-zoom')))
+    .toBeGreaterThan(before)
+})
+
+When('I pan the graph using {string}', async ({ page }, gesture: string) => {
+  const orders = {
+    right: ['right'],
+    'left then right': ['left', 'right'],
+    'right then left': ['right', 'left'],
+    'Shift and left': ['left'],
+    'pan mode': ['left'],
+  } as const
+  const buttons = orders[gesture as keyof typeof orders]
+  if (!buttons) throw new Error(`Unknown pointer gesture: ${gesture}`)
+  const panMode = page.getByRole('button', { name: 'Pan map', exact: true })
+  if (gesture === 'pan mode') {
+    await panMode.click()
+    await expect(panMode).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('.galaxy-canvas')).toHaveAttribute(
+      'data-camera-mode',
+      'pan',
+    )
+  }
+  const box = await page.locator('.galaxy-camera').boundingBox()
+  if (!box) throw new Error('The graph camera is not visible')
+  const start = { x: box.x + box.width * 0.18, y: box.y + box.height * 0.5 }
+  await page.mouse.move(start.x, start.y)
+  const before = await readCameraState(page)
+  expect(Object.values(before)).not.toContain(null)
+  const previousFrame = await readCelestialFrame(page)
+  if (gesture === 'Shift and left') await page.keyboard.down('Shift')
+  for (const button of buttons) await page.mouse.down({ button })
+  await page.mouse.move(start.x + 36, start.y + 20, { steps: 6 })
+  for (const button of [...buttons].reverse()) await page.mouse.up({ button })
+  if (gesture === 'Shift and left') await page.keyboard.up('Shift')
+
+  await expect
+    .poll(async () => Number((await readCameraState(page)).panX))
+    .toBeGreaterThan(Number(before.panX) + 12)
+  await expect
+    .poll(async () => Number((await readCameraState(page)).panY))
+    .toBeGreaterThan(Number(before.panY) + 6)
+  const after = await readCameraState(page)
+  expect({ yaw: after.yaw, pitch: after.pitch, zoom: after.zoom }).toEqual({
+    yaw: before.yaw,
+    pitch: before.pitch,
+    zoom: before.zoom,
+  })
+  await expect
+    .poll(async () => (await readCelestialFrame(page)).position)
+    .not.toBe(previousFrame.position)
+  if (gesture === 'pan mode') {
+    await panMode.click()
+    await expect(panMode).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.locator('.galaxy-canvas')).toHaveAttribute(
+      'data-camera-mode',
+      'orbit',
+    )
+  }
+})
+
+When('I pan and reset the graph camera with the keyboard', async ({ page }) => {
+  const camera = page.getByLabel('Knowledge graph', { exact: true })
+  const before = await readCameraState(page)
+  expect(Object.values(before)).not.toContain(null)
+  await camera.focus()
+  await camera.press('Shift+ArrowRight')
+  await camera.press('Shift+ArrowDown')
+  await expect
+    .poll(async () => (await readCameraState(page)).panX)
+    .not.toBe(before.panX)
+  await expect
+    .poll(async () => (await readCameraState(page)).panY)
+    .not.toBe(before.panY)
+  const after = await readCameraState(page)
+  expect({ yaw: after.yaw, pitch: after.pitch, zoom: after.zoom }).toEqual({
+    yaw: before.yaw,
+    pitch: before.pitch,
+    zoom: before.zoom,
+  })
+  await camera.press('Home')
+  await expect.poll(() => readCameraState(page)).toEqual(before)
+})
+
+When('I drag a camera toolbar control without moving the view', async ({ page }) => {
+  const control = page.getByRole('button', { name: 'Zoom in', exact: true })
+  const box = await control.boundingBox()
+  if (!box) throw new Error('The camera control is not visible')
+  const before = await readCameraState(page)
+  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  await page.mouse.move(start.x, start.y)
+  await page.mouse.down({ button: 'left' })
+  await page.mouse.move(start.x, start.y - 80, { steps: 6 })
+  await page.mouse.up({ button: 'left' })
+  expect(await readCameraState(page)).toEqual(before)
+})
+
+When('I enable touch panning', async ({ page }) => {
+  const toggle = page.getByRole('button', { name: 'Pan map', exact: true })
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+})
+
+When('I reset the graph pan', async ({ page }) => {
+  await page.getByRole('button', { name: 'Reset view', exact: true }).click()
+  await expect.poll(async () => Number((await readCameraState(page)).panX)).toBe(0)
+  await expect.poll(async () => Number((await readCameraState(page)).panY)).toBe(0)
+})
+
+When(
+  'I continuously pan {string} by touch through {int} pixels',
+  async ({ page }, target: string, distance: number) => {
+    const camera = page.locator('.galaxy-camera')
+    const bounds = await camera.boundingBox()
+    if (!bounds) throw new Error('The graph camera is not visible')
+    let start: { x: number; y: number } | null
+    if (target === 'canvas') {
+      start = await camera.evaluate((canvas) => {
+        const box = canvas.getBoundingClientRect()
+        for (const offsetY of [75, 120, 165]) {
+          for (const offsetX of [20, 45, 70]) {
+            const point = { x: box.x + offsetX, y: box.y + offsetY }
+            if (document.elementFromPoint(point.x, point.y) === canvas) return point
+          }
+        }
+        return null
+      })
+    } else {
+      const node = page.getByRole('button', { name: `Select ${target}`, exact: true })
+      const box = await node.boundingBox()
+      start = box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : null
+      if (start) {
+        expect(
+          await node.evaluate((element, point) => {
+            const hit = document.elementFromPoint(point.x, point.y)
+            return hit === element || element.contains(hit)
+          }, start),
+        ).toBe(true)
+      }
+    }
+    if (!start) throw new Error(`No visible touch start point for ${target}`)
+    const direction = start.x < bounds.x + bounds.width / 2 ? 1 : -1
+    const before = await readCameraState(page)
+    expect(Object.values(before)).not.toContain(null)
+    const originalUrl = page.url()
+    const client = await page.context().newCDPSession(page)
+    const touchPoint = { id: 1, radiusX: 1, radiusY: 1, force: 1 }
+    try {
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ ...touchPoint, x: start.x, y: start.y }],
+      })
+      for (const fraction of [0.25, 0.5, 0.75, 1]) {
+        const delta = direction * distance * fraction
+        await client.send('Input.dispatchTouchEvent', {
+          type: 'touchMove',
+          touchPoints: [{ ...touchPoint, x: start.x + delta, y: start.y }],
+        })
+        await expect
+          .poll(async () => Number((await readCameraState(page)).panX))
+          .toBeCloseTo(Number(before.panX) + delta, 0)
+      }
+    } finally {
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchEnd',
+        touchPoints: [],
+      })
+      await client.detach()
+    }
+    const after = await readCameraState(page)
+    expect({ yaw: after.yaw, pitch: after.pitch, zoom: after.zoom }).toEqual({
+      yaw: before.yaw,
+      pitch: before.pitch,
+      zoom: before.zoom,
+    })
+    expect(Number(after.panY)).toBeCloseTo(Number(before.panY), 0)
+    await expect(page).toHaveURL(originalUrl)
+    await expect(page.locator('.galaxy-selection')).toBeHidden()
   },
 )
 

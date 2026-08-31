@@ -52,6 +52,7 @@ const ptBR = {
     bridges: '{{count}} pontes',
     hub: 'Núcleo de conhecimento',
     cameraControls: 'Controles da câmera',
+    panMap: 'Mover mapa',
     rotateLeft: 'Girar à esquerda',
     rotateRight: 'Girar à direita',
     tiltUp: 'Inclinar para cima',
@@ -62,7 +63,10 @@ const ptBR = {
     pauseMotion: 'Pausar movimento',
     reducedMotion: 'Movimento desativado pela preferência do sistema',
     resumeMotion: 'Retomar movimento',
-    cameraHint: 'Arraste para girar · Role para zoom · Setas giram · Home restaura',
+    cameraHint: 'Arraste para girar · Direito/Shift + arraste move · Role para zoom',
+    cameraPanHint:
+      'Arraste para mover · Desative Mover mapa para girar · Role para zoom',
+    cameraKeyboardHint: 'Setas giram · Shift + setas movem · Home restaura',
     canvasUnavailable:
       'A vista espacial está indisponível. Escolha Ver em lista para explorar todas as memórias.',
   },

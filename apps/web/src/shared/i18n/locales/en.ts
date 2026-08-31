@@ -51,6 +51,7 @@ const en = {
     bridges: '{{count}} bridges',
     hub: 'Knowledge hub',
     cameraControls: 'Camera controls',
+    panMap: 'Pan map',
     rotateLeft: 'Rotate left',
     rotateRight: 'Rotate right',
     tiltUp: 'Tilt up',
@@ -61,7 +62,9 @@ const en = {
     pauseMotion: 'Pause motion',
     reducedMotion: 'Motion disabled by your system preference',
     resumeMotion: 'Resume motion',
-    cameraHint: 'Drag to orbit · Scroll to zoom · Arrow keys rotate · Home resets',
+    cameraHint: 'Drag to orbit · Right/Shift + drag to pan · Scroll to zoom',
+    cameraPanHint: 'Drag to pan · Turn off Pan map to orbit · Scroll to zoom',
+    cameraKeyboardHint: 'Arrows rotate · Shift + arrows pan · Home resets',
     canvasUnavailable:
       'The spatial view is unavailable. Choose List view to explore every memory.',
   },

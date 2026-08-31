@@ -21,6 +21,29 @@ Feature: Lorestra knowledge workflow
     When I open the selected graph node "What is Lorestra?" with the keyboard
     Then the heading "What is Lorestra?" is visible
 
+  Scenario: Pan a zoomed constellation with right drag and both button orders
+    Given I open Lorestra at "/atlas?scope=entire"
+    Then the knowledge graph has visible nodes
+    When I pause the celestial animation
+    And I zoom the graph for panning
+    And I pan the graph using "right"
+    And I pan the graph using "left then right"
+    And I pan the graph using "right then left"
+    And I pan the graph using "Shift and left"
+    And I pan the graph using "pan mode"
+    And I select the graph node "What is Lorestra?"
+    Then the selected graph node offers to open "What is Lorestra?"
+    When I open the selected graph node "What is Lorestra?" with the keyboard
+    Then the heading "What is Lorestra?" is visible
+
+  Scenario: Pan by keyboard without making toolbar drags move the graph
+    Given I open Lorestra at "/atlas?scope=entire"
+    Then the knowledge graph has visible nodes
+    When I pause the celestial animation
+    And I pan and reset the graph camera with the keyboard
+    And I drag a camera toolbar control without moving the view
+    Then the page has no horizontal overflow
+
   Scenario: Respect reduced motion while keeping the camera keyboard accessible
     Given I prefer reduced motion
     And I open Lorestra at "/atlas?scope=entire"
@@ -138,6 +161,17 @@ Feature: Lorestra knowledge workflow
     When I choose the language "Português (Brasil)"
     Then the heading "Aprenda Lorestra" is visible
     And the URL contains "/docs/pt-BR"
+
+  @mobile
+  Scenario: Keep a touch pan captured from both the canvas and a memory
+    Given I open Lorestra at "/atlas?scope=folder&folder=folder.demo.orion.en"
+    Then the knowledge graph has visible nodes
+    When I pause the celestial animation
+    And I enable touch panning
+    And I continuously pan "canvas" by touch through 80 pixels
+    And I reset the graph pan
+    And I continuously pan "Orion: reliable responses" by touch through 120 pixels
+    Then the URL contains "folder=folder.demo.orion.en"
 
   @mobile
   Scenario: Explore the celestial graph without mobile overflow

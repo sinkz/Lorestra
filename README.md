@@ -55,7 +55,7 @@ Tool schemas and callbacks reuse the exact same typed application clients as the
 
 ## Product tour
 
-- **Atlas** — explore a Canvas galaxy map with a rotatable camera: related documents orbit larger hubs, separate neighborhoods stay apart, and real cross-group links become bridges. Switch between the whole vault and a document's neighborhood, or use the equivalent list view.
+- **Atlas** — explore a Canvas galaxy map with orbit, pan, and focal zoom: related documents orbit larger hubs, separate neighborhoods stay apart, and real cross-group links become bridges. Right-drag (or Shift-drag) to pan, scroll to zoom toward the cursor, and use Home to reset. A Pan map toggle also supports primary-button and touch dragging. Switch between the whole vault and a document's neighborhood, or use the equivalent list view.
 - **Library** — scan, sort, and filter portable Markdown documents without stale navigation state; the folder tree virtualizes only beyond its measured threshold.
 - **Document workspace** — alternate between rendered Markdown, source, relations, history, and contextual graph.
 - **Proposals** — review a GitHub-like list, checks, affected files, new-file additions, and exact diffs.

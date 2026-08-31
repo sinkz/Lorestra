@@ -1,6 +1,12 @@
 import type { GraphSnapshot } from '../../shared/model/types'
 import { bodyColor, bodyKind, drawCelestialBody } from './celestialBodies'
-import { defaultCamera, moveCamera, projectPoint } from './galaxyCamera'
+import {
+  defaultCamera,
+  moveCamera,
+  panCamera,
+  projectPoint,
+  zoomCamera,
+} from './galaxyCamera'
 import type { layoutGalaxies } from './galaxyLayout'
 import { bodyMotion, createMotionClock, liveBodyIds } from './galaxyMotion'
 
@@ -433,6 +439,8 @@ export function createGalaxyScene({
     container.dataset.yaw = camera.yaw.toFixed(4)
     container.dataset.pitch = camera.pitch.toFixed(4)
     container.dataset.zoom = camera.zoom.toFixed(4)
+    container.dataset.panX = (camera.panX * width).toFixed(4)
+    container.dataset.panY = (camera.panY * height).toFixed(4)
   }
 
   function drawTravelers(time: number) {
@@ -561,8 +569,21 @@ export function createGalaxyScene({
       camera = moveCamera(camera, yaw, pitch)
       invalidate()
     },
-    zoom(factor: number) {
-      camera = moveCamera(camera, 0, 0, factor)
+    pan(dx: number, dy: number) {
+      camera = panCamera(camera, dx, dy, { width, height })
+      invalidate()
+    },
+    zoom(factor: number, anchor = { x: width / 2, y: height / 2 }) {
+      // Convert the visible canvas anchor back to projectPoint's coordinate space.
+      camera = zoomCamera(
+        camera,
+        factor,
+        { width, height },
+        {
+          x: anchor.x - pointer.x,
+          y: anchor.y + 20 - pointer.y,
+        },
+      )
       invalidate()
     },
     reset() {

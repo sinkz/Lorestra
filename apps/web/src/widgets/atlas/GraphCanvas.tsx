@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { GraphSnapshot } from '../../shared/model/types'
 import { CameraToolbar } from './CameraToolbar'
@@ -18,6 +18,7 @@ export function GraphCanvas({
   const hasNodes = graph.nodes.length > 0
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [paused, setPaused] = useState(false)
+  const [panMode, setPanMode] = useState(false)
   const [reducedMotion, setReducedMotion] = useState(
     () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   )
@@ -34,6 +35,16 @@ export function GraphCanvas({
   const scene = useRef<ReturnType<typeof createGalaxyScene>>(null)
   const drag = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null)
   const suppressClick = useRef(false)
+  const stopDrag = useCallback((pointerId?: number) => {
+    const active = drag.current
+    if (!active || (pointerId !== undefined && active.id !== pointerId)) return
+    drag.current = null
+    const container = containerRef.current
+    if (!container) return
+    delete container.dataset.dragging
+    if (container.hasPointerCapture(active.id))
+      container.releasePointerCapture(active.id)
+  }, [])
   const selected = graph.nodes.find((node) => node.id === selectedId)
   const positionById = useMemo(
     () => new Map(layout.nodes.map((node) => [node.id, node])),
@@ -68,10 +79,11 @@ export function GraphCanvas({
     setUnavailable(!current)
     setSelectedId(null)
     return () => {
+      stopDrag()
       current?.destroy()
       scene.current = null
     }
-  }, [graph, layout])
+  }, [graph, layout, stopDrag])
   useEffect(() => {
     scene.current?.motion(!motionPaused)
   }, [motionPaused, layout])
@@ -86,11 +98,32 @@ export function GraphCanvas({
     return () => media.removeEventListener('change', update)
   }, [])
   useEffect(() => {
+    const onBlur = () => stopDrag()
+    const onVisibility = () => {
+      if (document.hidden) stopDrag()
+    }
+    window.addEventListener('blur', onBlur)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('blur', onBlur)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [stopDrag])
+  useEffect(() => {
     const container = containerRef.current
     if (!container) return
     const wheel = (event: WheelEvent) => {
+      if ((event.target as HTMLElement).closest('.galaxy-toolbar, .galaxy-selection'))
+        return
       event.preventDefault()
-      scene.current?.zoom(Math.exp(-Math.max(-80, Math.min(80, event.deltaY)) * 0.002))
+      const bounds = container.getBoundingClientRect()
+      scene.current?.zoom(
+        Math.exp(-Math.max(-80, Math.min(80, event.deltaY)) * 0.002),
+        {
+          x: event.clientX - bounds.left - container.clientLeft,
+          y: event.clientY - bounds.top - container.clientTop,
+        },
+      )
     }
     container.addEventListener('wheel', wheel, { passive: false })
     return () => container.removeEventListener('wheel', wheel)
@@ -104,15 +137,23 @@ export function GraphCanvas({
       data-galaxy-count={layout.galaxies.length}
       data-bridge-count={layout.bridges.length}
       data-motion={motionPaused ? 'paused' : 'active'}
+      data-camera-mode={panMode ? 'pan' : 'orbit'}
       onPointerDown={(event) => {
+        if (
+          !event.isPrimary ||
+          (drag.current && drag.current.id !== event.pointerId) ||
+          ![0, 1, 2].includes(event.button)
+        )
+          return
         suppressClick.current = false
         if (
           (event.target as HTMLElement).closest('.galaxy-toolbar, .galaxy-selection')
         ) {
-          drag.current = null
+          stopDrag(event.pointerId)
           return
         }
-        if (event.button !== 0) return
+        // Preserve normal primary clicks on memories; suppress middle-button autoscroll.
+        if (event.button !== 0) event.preventDefault()
         drag.current = {
           id: event.pointerId,
           x: event.clientX,
@@ -123,30 +164,56 @@ export function GraphCanvas({
       onPointerMove={(event) => {
         const start = drag.current
         if (!start || start.id !== event.pointerId) return
+        if (event.pointerType === 'mouse' && event.buttons === 0) {
+          stopDrag(event.pointerId)
+          return
+        }
         const dx = event.clientX - start.x
         const dy = event.clientY - start.y
         if (!start.moved && Math.abs(dx) + Math.abs(dy) < 5) return
-        event.currentTarget.setPointerCapture(event.pointerId)
+        event.preventDefault()
+        if (!event.currentTarget.hasPointerCapture(event.pointerId))
+          event.currentTarget.setPointerCapture(event.pointerId)
         start.moved = true
         suppressClick.current = true
-        scene.current?.rotate(dx * 0.006, dy * 0.006)
+        // Chorded buttons change on pointermove, not a second pointerdown.
+        const pan = panMode || event.shiftKey || (event.buttons & 6) !== 0
+        event.currentTarget.dataset.dragging = pan ? 'pan' : 'orbit'
+        if (pan) scene.current?.pan(dx, dy)
+        else scene.current?.rotate(dx * 0.006, dy * 0.006)
         start.x = event.clientX
         start.y = event.clientY
       }}
       onPointerUp={(event) => {
-        if (event.currentTarget.hasPointerCapture(event.pointerId))
-          event.currentTarget.releasePointerCapture(event.pointerId)
-        drag.current = null
+        if (event.pointerType === 'mouse' && event.buttons !== 0) return
+        stopDrag(event.pointerId)
       }}
-      onPointerCancel={() => {
-        drag.current = null
-        suppressClick.current = false
+      onPointerCancel={(event) => stopDrag(event.pointerId)}
+      onLostPointerCapture={(event) => {
+        // Touch transfers implicit capture from the child to this container.
+        if (event.target === event.currentTarget) stopDrag(event.pointerId)
+      }}
+      onPointerLeave={(event) => {
+        if (!event.currentTarget.hasPointerCapture(event.pointerId))
+          stopDrag(event.pointerId)
+      }}
+      onContextMenu={(event) => {
+        if (
+          !(event.target as HTMLElement).closest('.galaxy-toolbar, .galaxy-selection')
+        )
+          event.preventDefault()
       }}
       onClickCapture={(event) => {
+        // A right drag has no primary click. Keyboard activation must remain usable.
+        if (suppressClick.current && event.detail > 0) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+      }}
+      onDoubleClickCapture={(event) => {
         if (suppressClick.current) {
           event.preventDefault()
           event.stopPropagation()
-          suppressClick.current = false
         }
       }}
     >
@@ -159,10 +226,20 @@ export function GraphCanvas({
         onClick={() => setSelectedId(null)}
         onKeyDown={(event) => {
           const controls: Record<string, () => void> = {
-            ArrowLeft: () => scene.current?.rotate(-0.16),
-            ArrowRight: () => scene.current?.rotate(0.16),
-            ArrowUp: () => scene.current?.rotate(0, -0.12),
-            ArrowDown: () => scene.current?.rotate(0, 0.12),
+            ArrowLeft: () =>
+              event.shiftKey
+                ? scene.current?.pan(-48, 0)
+                : scene.current?.rotate(-0.16),
+            ArrowRight: () =>
+              event.shiftKey ? scene.current?.pan(48, 0) : scene.current?.rotate(0.16),
+            ArrowUp: () =>
+              event.shiftKey
+                ? scene.current?.pan(0, -48)
+                : scene.current?.rotate(0, -0.12),
+            ArrowDown: () =>
+              event.shiftKey
+                ? scene.current?.pan(0, 48)
+                : scene.current?.rotate(0, 0.12),
             '+': () => scene.current?.zoom(1.15),
             '=': () => scene.current?.zoom(1.15),
             '-': () => scene.current?.zoom(1 / 1.15),
@@ -260,10 +337,18 @@ export function GraphCanvas({
         label={t('atlas.cameraControls')}
         controls={[
           {
+            id: 'pan',
+            label: t('atlas.panMap'),
+            icon: '✥',
+            onClick: () => setPanMode((current) => !current),
+            pressed: panMode,
+          },
+          {
             id: 'rotate-left',
             label: t('atlas.rotateLeft'),
             icon: '↶',
             onClick: () => scene.current?.rotate(-0.16),
+            separatorBefore: true,
           },
           {
             id: 'rotate-right',
@@ -313,7 +398,8 @@ export function GraphCanvas({
         ]}
       />
       <p id="galaxy-help" className="galaxy-help">
-        {t('atlas.cameraHint')}
+        <span>{t(panMode ? 'atlas.cameraPanHint' : 'atlas.cameraHint')}</span>
+        <span>{t('atlas.cameraKeyboardHint')}</span>
       </p>
     </div>
   )

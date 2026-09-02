@@ -20,6 +20,8 @@
     "local:build": "node scripts/local-build.mjs",
     "local:start": "node scripts/local-start.mjs",
     "check": "pnpm format:check && pnpm lint && pnpm deps:check && pnpm knip && pnpm peers:check && pnpm typecheck && pnpm test && pnpm build",
+    "cloudflare:dry-run": "pnpm --filter @lorestra/web build:public && pnpm --filter @lorestra/api build:public",
+    "cloudflare:deploy": "pnpm --filter @lorestra/web build:public && pnpm --filter @lorestra/api deploy:public",
     "dev": "pnpm --parallel --recursive --if-present dev",
     "deps:check": "depcruise --config .dependency-cruiser.cjs apps packages",
     "demo:webmcp": "pnpm --filter @lorestra/e2e --if-present run demo:webmcp",

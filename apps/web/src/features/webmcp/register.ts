@@ -10,11 +10,17 @@ export async function registerLorestraWebMcpTools(
   getLocale: () => Locale,
   parentSignal?: AbortSignal,
   interaction?: WebMcpInteraction,
+  options: { readOnly?: boolean } = {},
 ): Promise<WebMcpRegistration> {
   const modelContext = (targetDocument as WebMcpDocument).modelContext
   const controller = new AbortController()
-  const tools = createLorestraWebMcpTools(clients, getLocale, interaction).map(
-    (definition) => ({
+  const availableTools = createLorestraWebMcpTools(clients, getLocale, interaction)
+  const tools = availableTools
+    .filter(
+      (definition) =>
+        !options.readOnly || definition.annotations?.readOnlyHint === true,
+    )
+    .map((definition) => ({
       ...definition,
       execute: (input: Record<string, unknown>, options?: { signal?: AbortSignal }) =>
         definition.execute(input, {
@@ -22,8 +28,7 @@ export async function registerLorestraWebMcpTools(
             ? AbortSignal.any([controller.signal, options.signal])
             : controller.signal,
         }),
-    }),
-  )
+    }))
   const owner = Symbol('registration')
   registrationOwners.set(targetDocument, owner)
   parentSignal?.addEventListener('abort', () => controller.abort(), { once: true })

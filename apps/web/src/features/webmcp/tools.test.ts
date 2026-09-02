@@ -213,6 +213,41 @@ describe('Lorestra WebMCP tools', () => {
     expect(element.dataset.webmcpTools).toBeUndefined()
   })
 
+  it('registers only read tools for a public read-only session', async () => {
+    const registrations: WebMcpToolDefinition[] = []
+    const target = {
+      documentElement: { dataset: {} as DOMStringMap },
+      modelContext: {
+        async registerTool(tool: WebMcpToolDefinition) {
+          registrations.push(tool)
+        },
+      },
+    } as unknown as Document
+
+    const registration = await registerLorestraWebMcpTools(
+      target,
+      appClients,
+      () => 'en',
+      undefined,
+      undefined,
+      { readOnly: true },
+    )
+
+    expect(registration.status).toBe('registered')
+    expect(registration.registeredToolCount).toBe(8)
+    expect(registrations).toHaveLength(8)
+    expect(
+      registrations.every(({ annotations }) => annotations?.readOnlyHint === true),
+    ).toBe(true)
+    expect(registrations.map(({ name }) => name)).not.toEqual(
+      expect.arrayContaining([
+        'lorestra_create_proposal',
+        'lorestra_update_proposal',
+        'lorestra_transition_proposal',
+      ]),
+    )
+  })
+
   it('searches existing knowledge and returns bounded structured results', async () => {
     const search = toolNamed(tools, 'lorestra_search')
 

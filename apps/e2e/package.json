@@ -7,6 +7,7 @@
     "capture:readme": "node scripts/capture-readme.mjs",
     "demo:webmcp": "node scripts/webmcp-demo.mjs",
     "install:browsers": "playwright install --with-deps",
+    "smoke:public": "node scripts/public-showcase-smoke.mjs",
     "test:e2e": "bddgen && playwright test",
     "test:e2e:http": "bddgen -c playwright.http.config.ts && playwright test -c playwright.http.config.ts",
     "typecheck": "tsc --noEmit"

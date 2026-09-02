@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:public": "tsc --noEmit && vite build --mode public",
     "preview": "vite preview",
     "test": "vitest run --maxWorkers=1 --no-file-parallelism",
     "typecheck": "tsc --noEmit"

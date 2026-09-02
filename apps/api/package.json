@@ -6,6 +6,8 @@
   "main": "./src/runtime/worker.ts",
   "scripts": {
     "build": "wrangler deploy --dry-run",
+    "build:public": "wrangler deploy --config wrangler.public.jsonc --dry-run",
+    "deploy:public": "wrangler deploy --config wrangler.public.jsonc",
     "dev": "wrangler dev",
     "test": "vitest run",
     "test:mutation": "stryker run",

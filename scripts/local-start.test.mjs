@@ -57,6 +57,10 @@ test('preview proxy is strict and cannot target a remote origin', () => {
     host: '127.0.0.1',
     port: 4173,
     strictPort: true,
+    headers: {
+      'Origin-Agent-Cluster': '?1',
+      'Permissions-Policy': 'tools=(self)',
+    },
     proxy: {
       '/api': { target: 'http://127.0.0.1:4321', changeOrigin: false },
     },
@@ -178,6 +182,8 @@ test('production preview serves the built index and closes cleanly', async () =>
   try {
     const response = await globalThis.fetch(`http://127.0.0.1:${address.port}/`)
     assert.equal(response.status, 200)
+    assert.equal(response.headers.get('origin-agent-cluster'), '?1')
+    assert.equal(response.headers.get('permissions-policy'), 'tools=(self)')
     assert.match(await response.text(), /release-preview/)
   } finally {
     await server.close()

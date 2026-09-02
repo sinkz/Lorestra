@@ -87,6 +87,13 @@ export function createLocalPreviewOptions({ port, apiOrigin, host = '127.0.0.1' 
     host,
     port: normalizedPort,
     strictPort: true,
+    headers: {
+      // The Codex in-app browser's WebMCP shim intentionally rejects HTTP(S)
+      // documents that are not isolated in an origin-keyed agent cluster.
+      // Cloudflare applies the same headers from apps/web/public/_headers.
+      'Origin-Agent-Cluster': '?1',
+      'Permissions-Policy': 'tools=(self)',
+    },
     proxy: {
       '/api': {
         target: assertLoopbackHttpOrigin(apiOrigin),

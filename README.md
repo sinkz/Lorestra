@@ -12,7 +12,7 @@
 ![WebMCP](https://img.shields.io/badge/WebMCP-agent--ready-D3F56A?style=flat-square&labelColor=122019)
 ![License MIT](https://img.shields.io/badge/license-MIT-365848?style=flat-square)
 
-[Why Lorestra](#why-lorestra) · [WebMCP tools](#a-native-interface-for-agents) · [Run locally](#run-locally) · [Architecture](#architecture) · [Contributing](#contributing)
+[Live read-only demo](https://lorestra-webmcp-demo.diego-augusto-gdp.workers.dev/atlas?scope=entire) · [Why Lorestra](#why-lorestra) · [WebMCP tools](#a-native-interface-for-agents) · [Run locally](#run-locally) · [Architecture](#architecture) · [Contributing](#contributing)
 
 </div>
 
@@ -38,7 +38,7 @@ The result feels familiar to anyone who trusts GitHub's review model, but it is 
 
 ## A native interface for agents
 
-Lorestra does not ask an AI agent to scrape buttons or reverse-engineer the current UI. On a compatible browser, it registers eleven typed tools through the WebMCP `document.modelContext` API:
+Lorestra does not ask an AI agent to scrape buttons or reverse-engineer the current UI. On a compatible browser, the full local application registers eleven typed tools through the WebMCP `document.modelContext` API:
 
 | Tool                           | Purpose                                              | Boundary                     |
 | ------------------------------ | ---------------------------------------------------- | ---------------------------- |
@@ -55,6 +55,8 @@ Lorestra does not ask an AI agent to scrape buttons or reverse-engineer the curr
 | `lorestra_read_history`        | Trace proposals, documents, and resulting revisions  | Read-only                    |
 
 Tool schemas and callbacks reuse the exact same typed application clients as the human interface. Browsers without WebMCP keep the complete product experience; registration is progressive enhancement. All vault Markdown returned to an agent is marked as untrusted content and must be treated as evidence, never as instructions.
+
+The public Cloudflare showcase registers only the eight read tools. Proposal creation, editing, review, and merge remain available only in the durable local/Docker application; they are not hidden public commands.
 
 ## Product tour
 
@@ -244,14 +246,32 @@ Run `pnpm test:e2e:http` for the isolated persistent-backend browser suite, `pnp
 
 ## Cloudflare path
 
-The API already targets Cloudflare Workers and builds with Wrangler. The production seam is designed for:
+The zero-persistence public showcase is a separate, asset-only Cloudflare deployment. It serves a bundled, immutable fictional vault; search, graph traversal, navigation, and the eight read-only WebMCP tools execute in the visitor's browser. It has no Worker handler, D1 database, R2 bucket, queue, AI binding, secret, or write route. This makes it suitable for a public product tour, not shared collaboration.
+
+Validate its exact upload bundle without creating a remote resource:
+
+```bash
+pnpm cloudflare:dry-run
+```
+
+After authenticating Wrangler and deliberately choosing to publish:
+
+```bash
+pnpm cloudflare:deploy
+```
+
+See the [English](docs/guides/cloudflare-public-showcase.en.md) or [Português (Brasil)](docs/guides/cloudflare-public-showcase.pt-BR.md) runbook for verification, rollback, billing boundaries, and the distinction between the showcase and the full backend.
+
+The current read-only deployment is available at [lorestra-webmcp-demo.diego-augusto-gdp.workers.dev](https://lorestra-webmcp-demo.diego-augusto-gdp.workers.dev/atlas?scope=entire). Its deployment evidence and exact validation boundary are recorded in [Cloudflare public showcase evidence](docs/operations/cloudflare-public-showcase-evidence.md).
+
+The durable API separately targets Cloudflare Workers and builds with Wrangler. Its future shared production seam is designed for:
 
 - R2 as canonical Markdown and immutable revision storage;
 - D1 for metadata, relationships, proposal state, and revision pointers;
 - Cloudflare Access or OIDC for principal resolution;
 - rate limiting and queues only after measured demand justifies them.
 
-No live resource IDs or credentials are committed. The local backend exercises the Workers runtime without cloud provisioning. Free hosting has finite quotas and may have activation requirements: verify current Workers/D1/R2/identity pricing before an authorized deployment. On overload, fail clearly and preserve the draft; do not silently enable billing or build an unbounded queue.
+No live resource IDs or credentials are committed. The local backend exercises the Workers runtime without cloud provisioning. Do not add D1, R2, dynamic Worker code, identity providers, analytics, or queues to the public configuration without a separate cost and security review. On overload, fail clearly and preserve the draft; do not silently enable billing or build an unbounded queue.
 
 ## Security model
 

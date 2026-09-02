@@ -208,6 +208,7 @@ function WorkspaceSession({
       () => useShellStore.getState().locale,
       controller.signal,
       mergeConfirmation,
+      { readOnly: session.principal === null || session.readOnly.enabled },
     )
     return () => {
       controller.abort()
@@ -215,7 +216,13 @@ function WorkspaceSession({
       void queryClient.cancelQueries()
       queryClient.clear()
     }
-  }, [coordinated, queryClient, mergeConfirmation])
+  }, [
+    coordinated,
+    queryClient,
+    mergeConfirmation,
+    session.principal,
+    session.readOnly.enabled,
+  ])
   const logout = async () => {
     await clients.session!.logout({
       idempotencyKey: crypto.randomUUID(),

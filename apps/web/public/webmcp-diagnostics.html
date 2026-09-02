@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lorestra WebMCP diagnostics</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        background: #061713;
+        color: #dff7eb;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+      }
+
+      main {
+        width: min(42rem, calc(100% - 3rem));
+        padding: 2rem;
+        border: 1px solid #2c6957;
+        border-radius: 1rem;
+        background: #0b211b;
+        box-shadow: 0 1.5rem 5rem rgb(0 0 0 / 35%);
+      }
+
+      h1 {
+        margin-top: 0;
+        font-family: system-ui, sans-serif;
+      }
+
+      dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 0.75rem 1rem;
+      }
+
+      dt {
+        color: #89b9a8;
+      }
+
+      dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+
+      [data-state='registered'] {
+        color: #b9f457;
+      }
+
+      [data-state='unsupported'],
+      [data-state='failed'] {
+        color: #ff9a80;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Lorestra WebMCP probe</h1>
+      <p>
+        This isolated page registers one read-only tool synchronously, without React,
+        the Lorestra API, authentication, or vault data.
+      </p>
+      <dl>
+        <dt>Origin</dt>
+        <dd id="origin"></dd>
+        <dt>Secure context</dt>
+        <dd id="secure-context"></dd>
+        <dt>modelContext</dt>
+        <dd id="model-context"></dd>
+        <dt>Registration</dt>
+        <dd id="registration"></dd>
+      </dl>
+    </main>
+
+    <script>
+      const values = {
+        origin: window.location.origin,
+        secureContext: String(window.isSecureContext),
+        modelContext: typeof document.modelContext,
+      }
+
+      document.querySelector('#origin').textContent = values.origin
+      document.querySelector('#secure-context').textContent = values.secureContext
+      document.querySelector('#model-context').textContent = values.modelContext
+
+      const registration = document.querySelector('#registration')
+      const registerTool = document.modelContext?.registerTool
+
+      if (typeof registerTool !== 'function') {
+        registration.textContent =
+          'unsupported — document.modelContext.registerTool is absent'
+        registration.dataset.state = 'unsupported'
+        document.documentElement.dataset.webmcpProbe = 'unsupported'
+      } else {
+        try {
+          document.modelContext.registerTool({
+            name: 'lorestra_webmcp_probe',
+            description:
+              'Reports that the Lorestra WebMCP diagnostic page is available.',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+              additionalProperties: false,
+            },
+            execute: async () => ({
+              content: [
+                {
+                  type: 'text',
+                  text: 'Lorestra WebMCP probe is registered and callable.',
+                },
+              ],
+              structuredContent: {
+                ok: true,
+                origin: window.location.origin,
+                secureContext: window.isSecureContext,
+              },
+            }),
+          })
+
+          registration.textContent = 'registered — lorestra_webmcp_probe'
+          registration.dataset.state = 'registered'
+          document.documentElement.dataset.webmcpProbe = 'registered'
+        } catch (error) {
+          registration.textContent = `failed — ${error instanceof Error ? error.message : String(error)}`
+          registration.dataset.state = 'failed'
+          document.documentElement.dataset.webmcpProbe = 'failed'
+        }
+      }
+    </script>
+  </body>
+</html>

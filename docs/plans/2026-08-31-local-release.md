@@ -1,7 +1,7 @@
 # Local release plan
 
 - Date: 2026-08-31.
-- Status: **runner and packaging implemented; local browser/native evidence recorded; Docker execution remains unverified**.
+- Status: **runner and packaging implemented; local browser/native and Docker Desktop evidence recorded**.
 - Scope: make the durable local Lorestra path reproducible after cloning without changing the shared deployment boundary.
 
 ## In scope
@@ -19,7 +19,7 @@
 - No automatic seed, reset, migration destructive action, credential generation at startup or remote provisioning.
 - No public/network binding for direct local runs; the container wrapper opts into its internal all-interface listener only so Docker can publish it on host loopback.
 - No Cloudflare account, third-party identity provider, billing, deployment, online credential copy or production service claim.
-- No claim that Docker runtime, cross-machine operation or every browser's WebMCP implementation has been validated.
+- No claim beyond the recorded Docker Desktop `linux/amd64` run; cross-machine operation, other host platforms and every browser's WebMCP implementation remain separate gates.
 
 ## Verification record
 
@@ -29,6 +29,6 @@
 | `pnpm local:build` | Production HTTP bundle built successfully |
 | `pnpm local:start` | Supervisor/child path implemented; real restart/lock/HTTP lifecycle regression passed 1/1 across two start/stop cycles (one restart), with full document-body/version preservation, cooperative Windows IPC shutdown and no retained operator lock |
 | Native WebMCP release exercise | Recorded in [local release evidence](../operations/local-release-evidence.md) |
-| Docker engine run | Not available in the validation environment |
+| Docker engine run | Docker Desktop 27.4 `linux/amd64`: build, init, UI/API/WebMCP checks, proposal governance, immutable revisions, recreation, host reboot, session renewal and named-volume persistence passed; see [Docker local evidence](../operations/docker-local-evidence.md) |
 
 The broader backend plan and its remaining gates stay authoritative; this plan records a local distribution path, not a replacement acceptance matrix.

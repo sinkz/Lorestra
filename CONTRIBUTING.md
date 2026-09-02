@@ -5,6 +5,8 @@ reviewable. Contributions should preserve that boundary.
 
 ## Development
 
+Start with the environment and testing guide in [English](docs/guides/local-setup-and-testing.en.md) or [Português (Brasil)](docs/guides/local-setup-and-testing.pt-BR.md), including local sign-in, isolated E2E setup and troubleshooting.
+
 Use Node 24 LTS and pnpm 11.24.0. After dependencies are installed, run:
 
 ```text

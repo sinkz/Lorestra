@@ -195,10 +195,12 @@ export const test = base.extend<
     const scratchRoot = tmpdir()
     await mkdir(scratchRoot, { recursive: true })
     const scratch = await mkdtemp(path.join(scratchRoot, 'lorestra-http-'))
-    const backend = new BackendRuntime(backendBundle, scratch)
+    const storagePath = path.join(scratch, 'state')
+    const backend = new BackendRuntime(backendBundle, storagePath)
     try {
-      // Copy only a closed, internally created fixture store, never a live database.
-      await cp(backendBundle.templatePath, scratch, {
+      // Copy into a nonexistent child so errorOnExist behaves consistently on every OS.
+      // The source is a closed, internally created fixture store, never a live database.
+      await cp(backendBundle.templatePath, storagePath, {
         recursive: true,
         errorOnExist: true,
         force: false,

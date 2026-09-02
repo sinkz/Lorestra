@@ -90,6 +90,8 @@ Switch to the Markdown tab to inspect the source. Proposed edits follow review a
 
 ## Run locally
 
+Step-by-step environment, sign-in and testing guides: [English](docs/guides/local-setup-and-testing.en.md) · [Português (Brasil)](docs/guides/local-setup-and-testing.pt-BR.md). They cover native local setup, development modes, optional Docker, Playwright/Gherkin, native WebMCP checks and known limitations.
+
 ### Requirements
 
 - Node.js `24.x` (the repository requires `>=24.12.0 <25`)
@@ -133,12 +135,14 @@ Docker is an optional packaging path. The image runs as a non-root user, publish
 docker compose build
 docker compose run --name lorestra-init --no-deps lorestra node scripts/backend-local.mjs init
 mkdir -p .lorestra/state
-docker cp lorestra-init:/app/.lorestra/state/local-session.json .lorestra/state/local-session.json
+docker cp lorestra-init:/app/.lorestra/state/local-session.json .lorestra/state/docker-session.json
 docker rm lorestra-init
 docker compose up
 ```
 
-On PowerShell, create the ignored destination with `New-Item -ItemType Directory -Force .lorestra/state` before `docker cp`. The copy is for the local sign-in dialog; no token is printed. Renew a Docker session with the same named one-shot pattern and copy command, replacing `init` with `session`. `docker compose down` preserves the named volume; do not use `docker compose down -v` unless intentionally deleting the local vault. Docker execution is not certified in the current validation environment because no Docker engine was available.
+On PowerShell, create the ignored destination with `New-Item -ItemType Directory -Force .lorestra/state` before `docker cp`. The copy is for the local sign-in dialog; no token is printed. Renew a Docker session with the same named one-shot pattern and copy command, replacing `init` with `session`. `docker compose down` preserves the named volume; do not use `docker compose down -v` unless intentionally deleting the local vault.
+
+This path was exercised on Docker Desktop 27.4 (`linux/amd64`): clean image build, explicit initialization, local sign-in, proposal/review/merge, immutable revisions, native WebMCP reads, container recreation, host reboot, session renewal and volume persistence all passed. That is local packaging evidence, not a production, shared-identity, cloud or cross-platform certification. See the [Docker evidence record](docs/operations/docker-local-evidence.md).
 
 ### Disposable development and HTTP workflows
 

@@ -35,7 +35,7 @@ pnpm local:start
 
 Open `http://127.0.0.1:4173` and use only the `token` from `.lorestra/state/local-session.json` in the sign-in dialog. `local:start` proxies `/api` to the Worker on an ephemeral loopback port, holds the operator lock, and closes Vite, Miniflare and the lock on Ctrl+C. It requires the `seed_id` written by explicit `backend:init`; it never seeds or resets state on startup. Re-run `pnpm local:start` to restart with the same D1/R2 state. Rebuild with `pnpm local:build` after source changes.
 
-The focused release-runner tests are `pnpm test:local`; the current suite passes 9/9 (the initial six-case run preceded the preview/lifecycle additions). They cover loopback/host allowlists, explicit initialization and build preflights, strict occupied-port handling, preview serving/close and the proxy contract. The separate real-runtime lifecycle regression passes 1/1 across two start/stop cycles (one restart). A successful focused test run is not Docker or native-browser evidence.
+The focused release-runner tests are `pnpm test:local`; the current suite passes 9/9 (the initial six-case run preceded the preview/lifecycle additions). They cover loopback/host allowlists, explicit initialization and build preflights, strict occupied-port handling, preview serving/close and the proxy contract. The separate real-runtime lifecycle regression passes 1/1 across two start/stop cycles (one restart). A successful focused test run alone is not container or native-browser evidence; Docker has a separate [runtime evidence record](docker-local-evidence.md).
 
 The defaults are:
 

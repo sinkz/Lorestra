@@ -6,8 +6,10 @@ cooperative IPC shutdown. The new real-runtime restart/lock regression passed
 1/1 across two start/stop cycles (one restart), with full
 document-body/version preservation, cooperative Windows IPC shutdown and no
 retained operator lock. Windows physical Ctrl+C
-delivery remains unvalidated in this environment. Docker execution remains
-unverified because no Docker engine was available.
+delivery remains unvalidated in this environment. The optional Docker path was
+subsequently validated on Docker Desktop, including persistence after a host
+reboot; its separate scope and limitations are recorded in
+[Docker local evidence](docker-local-evidence.md).
 
 Date: 2026-08-31. Scope: a local synthetic installation of Lorestra, not a shared deployment or a production readiness claim.
 
@@ -44,10 +46,10 @@ lifecycle coverage. Supporting recorded gates include the HTTP suite at 21/21
 with zero retries in 2.4 minutes and the visual suite at 19/19 with zero retries
 in 32.5 seconds.
 
-The runner and Docker compose configuration were inspected on Windows. Docker execution is **not verified** in this environment because no Docker engine was available; the compose file is configuration evidence only. No Docker credentials, Cloudflare credentials, billing or deployment were used.
+The Docker path passed a clean Linux image build, explicit initialization, UI/API/WebMCP smoke checks, container recreation and host-reboot persistence on Docker Desktop 27.4. See [Docker local evidence](docker-local-evidence.md) for the exact checks, one transient image-load failure, cleanup and remaining boundaries. No Docker registry credentials, Cloudflare credentials, billing or deployment were used.
 
 ## Boundaries
 
 The human interface is browser-agnostic at the application level. Native WebMCP behavior is validated here only in the Codex in-app browser; other compatible browsers remain unverified. For current external implementation status, see [WebMCP implementation status](https://github.com/webmachinelearning/webmcp/blob/main/implementation-status.md) and the [Chrome WebMCP documentation](https://developer.chrome.com/docs/ai/webmcp).
 
-This evidence does not mark the complete backend plan as 100% complete. Shared identity, staging, cross-machine operation, Docker runtime execution and the remaining acceptance clauses remain separate gates.
+This evidence does not mark the complete backend plan as 100% complete. Shared identity, staging, cross-machine operation, additional host platforms and the remaining acceptance clauses remain separate gates.
